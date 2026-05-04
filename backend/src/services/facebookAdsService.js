@@ -78,7 +78,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       ? decrypted.ad_account_id
       : `act_${decrypted.ad_account_id}`;
 
-    let timeRange = '{"date_preset":"last_30d"}';
+    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
     if (dateRange.from && dateRange.to) {
       timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
     }
@@ -191,7 +191,7 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    let timeRange = '{"date_preset":"last_30d"}';
+    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
     if (dateRange.from && dateRange.to) {
       timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
     }
@@ -244,7 +244,7 @@ const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    let timeRange = '{"date_preset":"last_30d"}';
+    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
     if (dateRange.from && dateRange.to) {
       timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
     }
@@ -324,7 +324,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
       ? decrypted.ad_account_id
       : `act_${decrypted.ad_account_id}`;
 
-    let timeRange = '{"date_preset":"last_30d"}';
+    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
     if (dateRange.from && dateRange.to) {
       timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
     }
