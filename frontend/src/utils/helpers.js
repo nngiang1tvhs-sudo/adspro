@@ -31,11 +31,16 @@ export const formatNumber = (n, options = {}) => {
  */
 export const formatCurrency = (n, options = {}) => {
   const num = Number(n) || 0;
+  const cur = options.currency || 'VND';
+  const symbols = { VND: 'd', USD: '$', JPY: 'Y', EUR: 'E', KRW: 'W', THB: 'B', GBP: 'P' };
+  const sym = symbols[cur] || cur;
+  const pre = ['USD', 'EUR', 'GBP'].includes(cur);
+  const wrap = (v) => pre ? sym + v : v + sym;
   if (options.compact !== false) {
-    if (Math.abs(num) >= 1_000_000) return (num / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
-    if (Math.abs(num) >= 1_000) return (num / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    if (Math.abs(num) >= 1_000_000) return wrap((num / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M');
+    if (Math.abs(num) >= 1_000) return wrap((num / 1_000).toFixed(1).replace(/\.0$/, '') + 'K');
   }
-  return new Intl.NumberFormat('vi-VN').format(Math.round(num)) + 'đ';
+  return wrap(new Intl.NumberFormat('vi-VN').format(Math.round(num)));
 };
 
 /**
@@ -169,10 +174,10 @@ export const DEFAULT_COLUMNS = {
   ],
 };
 
-export const formatCellValue = (value, format) => {
+export const formatCellValue = (value, format, currency) => {
   if (value === null || value === undefined) return '—';
   switch (format) {
-    case 'currency': return formatCurrency(value);
+    case 'currency': return formatCurrency(value, { currency });
     case 'percent': return formatPercent(value);
     case 'number': return formatNumber(value);
     case 'roas': return Number(value).toFixed(2) + 'x';
