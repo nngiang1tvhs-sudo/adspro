@@ -212,10 +212,10 @@ export default function CampaignsPage() {
       );
     }
     if (col.key === 'objective') return <span className="badge badge-info text-[10px]">{camp.objective || '—'}</span>;
-    if (col.key === 'budget') return formatCellValue(camp.budget, 'currency');
+    if (col.key === 'budget') return formatCellValue(camp.budget, 'currency', camp.currency);
 
     const value = camp.metrics?.[col.key];
-    return formatCellValue(value, col.format);
+    return formatCellValue(value, col.format, camp.currency);
   };
 
   return (
@@ -400,13 +400,13 @@ export default function CampaignsPage() {
                         <span className={`badge ${getStatusBadge(ag.status).class}`}>{getStatusBadge(ag.status).label}</span>
                       </td>
                       <td className="px-3 py-2.5 border-b border-slate-100">
-                        {ag.target_cpv ? formatCellValue(ag.target_cpv, 'currency') : ag.target_cpm ? formatCellValue(ag.target_cpm, 'currency') : '—'}
+                        {ag.target_cpv ? formatCellValue(ag.target_cpv, 'currency', drillDown?.campaign?.currency) : ag.target_cpm ? formatCellValue(ag.target_cpm, 'currency', drillDown?.campaign?.currency) : '—'}
                       </td>
                       <td className="px-3 py-2.5 border-b border-slate-100">{formatCellValue(ag.metrics?.impressions, 'number')}</td>
                       <td className="px-3 py-2.5 border-b border-slate-100">{formatCellValue(ag.metrics?.clicks, 'number')}</td>
-                      <td className="px-3 py-2.5 border-b border-slate-100 font-medium">{formatCellValue(ag.metrics?.spend, 'currency')}</td>
+                      <td className="px-3 py-2.5 border-b border-slate-100 font-medium">{formatCellValue(ag.metrics?.spend, 'currency', drillDown?.campaign?.currency)}</td>
                       <td className="px-3 py-2.5 border-b border-slate-100 text-blue-600">{formatCellValue(ag.metrics?.video_views || ag.metrics?.conversions, 'number')}</td>
-                      <td className="px-3 py-2.5 border-b border-slate-100 text-blue-600">{formatCellValue(ag.metrics?.cpv || ag.metrics?.cpa, 'currency')}</td>
+                      <td className="px-3 py-2.5 border-b border-slate-100 text-blue-600">{formatCellValue(ag.metrics?.cpv || ag.metrics?.cpa, 'currency', drillDown?.campaign?.currency)}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -469,11 +469,11 @@ export default function CampaignsPage() {
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <div className="card p-3 text-center">
             <div className="text-[10px] text-slate-400">Ngân sách/ngày</div>
-            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalBudget, 'currency')}</div>
+            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalBudget, 'currency', campaigns[0]?.currency)}</div>
           </div>
           <div className="card p-3 text-center">
             <div className="text-[10px] text-slate-400">Đã chi tiêu</div>
-            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalSpend, 'currency')}</div>
+            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalSpend, 'currency', campaigns[0]?.currency)}</div>
           </div>
           <div className="card p-3 text-center">
             <div className="text-[10px] text-slate-400">Tổng kết quả</div>
@@ -481,7 +481,7 @@ export default function CampaignsPage() {
           </div>
           <div className="card p-3 text-center">
             <div className="text-[10px] text-slate-400">CP/KQ trung bình</div>
-            <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(summary.avgCostPerResult, 'currency')}</div>
+            <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(summary.avgCostPerResult, 'currency', campaigns[0]?.currency)}</div>
           </div>
         </div>
       )}
