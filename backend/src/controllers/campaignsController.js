@@ -19,7 +19,7 @@ const listCampaigns = asyncHandler(async (req, res) => {
     SELECT
       c.id, c.external_id, c.name, c.status, c.objective, c.budget, c.budget_type,
       c.metrics, c.start_date, c.end_date, c.updated_at,
-      c.account_id, a.account_name, a.platform
+      c.account_id, a.account_name, a.platform, a.currency
     FROM campaigns c
     JOIN ad_accounts a ON c.account_id = a.id
     WHERE a.user_id = $1 AND a.platform = $2
