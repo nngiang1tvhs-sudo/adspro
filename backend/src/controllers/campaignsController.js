@@ -46,7 +46,29 @@ const listCampaigns = asyncHandler(async (req, res) => {
 
   sql += ' ORDER BY c.updated_at DESC';
 
-  const result = await query(sql, params);
+const result = await query(sql, params);
+
+  if (date_from && date_to && result.rows.length > 0) {
+    const campaignIds = result.rows.map(r => r.id);
+    try {
+      const metricsResult = await query(
+        'SELECT campaign_id, SUM(spend) as spend, SUM(impressions) as impressions, SUM(clicks) as clicks, SUM(conversions) as conversions, SUM(COALESCE(video_views, 0)) as video_views, SUM(COALESCE(messages, 0)) as messages FROM daily_metrics WHERE campaign_id = ANY($1) AND date BETWEEN $2 AND $3 GROUP BY campaign_id',
+        [campaignIds, date_from, date_to]
+      );
+      const metricsMap = {};
+      metricsResult.rows.forEach(m => { metricsMap[m.campaign_id] = m; });
+      result.rows.forEach(r => {
+        const dm = metricsMap[r.id];
+        if (dm) {
+          const spend = Number(dm.spend);
+          const impressions = Number(dm.impressions);
+          const clicks = Number(dm.clicks);
+          const conversions = Number(dm.conversions);
+          r.metrics = { ...r.metrics, spend, impressions, clicks, conversions, video_views: Number(dm.video_views), messages: Number(dm.messages), ctr: impressions > 0 ? ((clicks / impressions) * 100) : 0, cpc: clicks > 0 ? spend / clicks : 0, cpm: impressions > 0 ? (spend / impressions) * 1000 : 0, cpa: conversions > 0 ? spend / conversions : 0 };
+        }
+      });
+    } catch (err) { console.warn('Aggregate metrics error:', err.message); }
+  }
 
   // Tính summary
   const activeCount = result.rows.filter(r => ['ENABLED', 'ACTIVE', 'ENABLE'].includes(r.status)).length;
