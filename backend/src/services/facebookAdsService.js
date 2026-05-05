@@ -360,6 +360,7 @@ module.exports = {
   testConnection,
   getCampaigns,
   getAdSets,
+  getAdGroups: getAdSets,
   getAds,
   toggleCampaignStatus,
   getDailyMetrics,
