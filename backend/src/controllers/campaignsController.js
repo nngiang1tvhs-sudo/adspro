@@ -15,59 +15,67 @@ const listCampaigns = asyncHandler(async (req, res) => {
     return error(res, 'Vui lòng chọn nền tảng', 400);
   }
 
-  let sql = `
-    SELECT
-      c.id, c.external_id, c.name, c.status, c.objective, c.budget, c.budget_type,
-      c.metrics, c.start_date, c.end_date, c.updated_at,
-      c.account_id, a.account_name, a.platform, a.currency
-    FROM campaigns c
-    JOIN ad_accounts a ON c.account_id = a.id
-    WHERE a.user_id = $1 AND a.platform = $2
-  `;
-  const params = [req.user.id, platform];
-  let idx = 3;
-
+  // Lấy danh sách accounts để gọi API trực tiếp
+  let accountSql = 'SELECT id, platform, credentials, account_name, currency FROM ad_accounts WHERE user_id = $1 AND platform = $2';
+  const accountParams = [req.user.id, platform];
   if (account_id) {
-    sql += ` AND a.id = $${idx++}`;
-    params.push(account_id);
+    accountSql += ' AND id = $3';
+    accountParams.push(account_id);
   }
+  const accountsResult = await query(accountSql, accountParams);
+
+  if (accountsResult.rowCount === 0) {
+    return success(res, { campaigns: [], summary: { total: 0, active: 0, totalSpend: 0, totalBudget: 0, totalResults: 0, avgCostPerResult: 0 } });
+  }
+
+  let allCampaigns = [];
+  const dateRange = (date_from && date_to) ? { from: date_from, to: date_to } : {};
+
+  for (const account of accountsResult.rows) {
+    try {
+      const service = getService(account.platform);
+      const campaigns = await service.getCampaigns(account.credentials, dateRange);
+
+      // Lấy DB id cho mỗi campaign
+      const dbCamps = await query(
+        'SELECT id, external_id FROM campaigns WHERE account_id = $1',
+        [account.id]
+      );
+      const extToDbId = {};
+      dbCamps.rows.forEach(c => { extToDbId[c.external_id] = c.id; });
+
+      for (const camp of campaigns) {
+        const dbId = extToDbId[camp.external_id];
+        allCampaigns.push({
+          id: dbId || camp.external_id,
+          external_id: camp.external_id,
+          name: camp.name,
+          status: camp.status,
+          objective: camp.objective,
+          budget: camp.budget,
+          budget_type: camp.budget_type,
+          metrics: camp.metrics || {},
+          account_id: account.id,
+          account_name: account.account_name,
+          platform: account.platform,
+          currency: account.currency,
+        });
+      }
+    } catch (err) {
+      console.error('API fetch error for account', account.id, err.message);
+    }
+  }
+
+  // Filter theo status, objective, search
   if (status) {
-    sql += ` AND c.status = $${idx++}`;
-    params.push(status);
+    allCampaigns = allCampaigns.filter(c => c.status === status);
   }
   if (objective) {
-    sql += ` AND c.objective = $${idx++}`;
-    params.push(objective);
+    allCampaigns = allCampaigns.filter(c => c.objective === objective);
   }
   if (search) {
-    sql += ` AND c.name ILIKE $${idx++}`;
-    params.push(`%${search}%`);
-  }
-
-  sql += ' ORDER BY c.updated_at DESC';
-
-const result = await query(sql, params);
-
-  if (date_from && date_to && result.rows.length > 0) {
-    const campaignIds = result.rows.map(r => r.id);
-    try {
-      const metricsResult = await query(
-        'SELECT campaign_id, SUM(spend) as spend, SUM(impressions) as impressions, SUM(clicks) as clicks, SUM(conversions) as conversions, SUM(COALESCE(video_views, 0)) as video_views, SUM(COALESCE(messages, 0)) as messages FROM daily_metrics WHERE campaign_id = ANY($1) AND date BETWEEN $2 AND $3 GROUP BY campaign_id',
-        [campaignIds, date_from, date_to]
-      );
-      const metricsMap = {};
-      metricsResult.rows.forEach(m => { metricsMap[m.campaign_id] = m; });
-      result.rows.forEach(r => {
-        const dm = metricsMap[r.id];
-        if (dm) {
-          const spend = Number(dm.spend);
-          const impressions = Number(dm.impressions);
-          const clicks = Number(dm.clicks);
-          const conversions = Number(dm.conversions);
-          r.metrics = { ...r.metrics, spend, impressions, clicks, conversions, video_views: Number(dm.video_views), messages: Number(dm.messages), ctr: impressions > 0 ? ((clicks / impressions) * 100) : 0, cpc: clicks > 0 ? spend / clicks : 0, cpm: impressions > 0 ? (spend / impressions) * 1000 : 0, cpa: conversions > 0 ? spend / conversions : 0 };
-        }
-      });
-    } catch (err) { console.warn('Aggregate metrics error:', err.message); }
+    const s = search.toLowerCase();
+    allCampaigns = allCampaigns.filter(c => c.name.toLowerCase().includes(s));
   }
 
   // Tính summary
