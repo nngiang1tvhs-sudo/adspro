@@ -78,10 +78,10 @@ const listCampaigns = asyncHandler(async (req, res) => {
     allCampaigns = allCampaigns.filter(c => c.name.toLowerCase().includes(s));
   }
 
-  // Tính summary
-  const activeCount = result.rows.filter(r => ['ENABLED', 'ACTIVE', 'ENABLE'].includes(r.status)).length;
+// Tính summary
+  const activeCount = allCampaigns.filter(r => ['ENABLED', 'ACTIVE', 'ENABLE'].includes(r.status)).length;
   let totalSpend = 0, totalResults = 0, totalBudget = 0;
-  result.rows.forEach(r => {
+  allCampaigns.forEach(r => {
     const m = r.metrics || {};
     totalSpend += Number(m.spend || 0);
     totalBudget += Number(r.budget || 0);
@@ -89,9 +89,9 @@ const listCampaigns = asyncHandler(async (req, res) => {
   });
 
   return success(res, {
-    campaigns: result.rows,
+    campaigns: allCampaigns,
     summary: {
-      total: result.rowCount,
+      total: allCampaigns.length,
       active: activeCount,
       totalSpend,
       totalBudget,
