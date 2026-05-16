@@ -9,7 +9,7 @@ const listAccounts = asyncHandler(async (req, res) => {
   const { platform } = req.query;
 
   let sql = `
-    SELECT id, uuid, platform, account_name, account_id, status, status_message,
+    SELECT id, uuid, platform, account_name, account_id, currency, status, status_message,
            last_sync_at, token_expires_at, created_at, updated_at
     FROM ad_accounts
     WHERE user_id = $1
@@ -99,10 +99,10 @@ const createAccount = asyncHandler(async (req, res) => {
 
       const perAccountEncrypted = encryptCredentials({ ...credentials, ad_account_id: acc.id });
       const r = await query(
-        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status)
-         VALUES ($1,$2,$3,$4,$5,'active')
-         RETURNING id,uuid,platform,account_name,account_id,status,created_at`,
-        [req.user.id, 'facebook', `${bmLabel} — ${acc.name}`, acc.id, JSON.stringify(perAccountEncrypted)]
+        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status,currency)
+         VALUES ($1,$2,$3,$4,$5,'active',$6)
+         RETURNING id,uuid,platform,account_name,account_id,status,currency,created_at`,
+        [req.user.id, 'facebook', `${bmLabel} — ${acc.name}`, acc.id, JSON.stringify(perAccountEncrypted), acc.currency || null]
       );
       created.push(r.rows[0]);
     }
@@ -132,6 +132,8 @@ const createAccount = asyncHandler(async (req, res) => {
     return error(res, `Kết nối thất bại: ${testResult.message}`, 400);
   }
 
+  const currency = testResult.data?.currency || null;
+
   const existing = await query(
     'SELECT id FROM ad_accounts WHERE platform = $1 AND account_id = $2',
     [platform, extractedAccountId]
@@ -147,10 +149,10 @@ const createAccount = asyncHandler(async (req, res) => {
 
   const result = await query(
     `INSERT INTO ad_accounts
-     (user_id, platform, account_name, account_id, credentials, status, last_sync_at, token_expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)
-     RETURNING id, uuid, platform, account_name, account_id, status, created_at`,
-    [req.user.id, platform, account_name, extractedAccountId, JSON.stringify(encrypted), 'active', tokenExpiresAt]
+     (user_id, platform, account_name, account_id, credentials, status, currency, last_sync_at, token_expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8)
+     RETURNING id, uuid, platform, account_name, account_id, status, currency, created_at`,
+    [req.user.id, platform, account_name, extractedAccountId, JSON.stringify(encrypted), 'active', currency, tokenExpiresAt]
   );
 
   await logEvent({
@@ -265,8 +267,9 @@ const testExistingAccount = asyncHandler(async (req, res) => {
   const testResult = await service.testConnection(account.credentials);
 
   await query(
-    'UPDATE ad_accounts SET status = $1, status_message = $2 WHERE id = $3',
-    [testResult.success ? 'active' : 'error', testResult.message, id]
+    `UPDATE ad_accounts SET status = $1, status_message = $2,
+     currency = COALESCE($3, currency) WHERE id = $4`,
+    [testResult.success ? 'active' : 'error', testResult.message, testResult.data?.currency || null, id]
   );
 
   await logEvent({

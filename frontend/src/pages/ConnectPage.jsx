@@ -183,7 +183,12 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
             <h4 className="font-semibold text-slate-800 truncate">{account.account_name}</h4>
             <Icon size={14} className={statusInfo.color} />
           </div>
-          <div className="text-xs text-slate-500 truncate">ID: {account.account_id}</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs text-slate-500 truncate">ID: {account.account_id}</span>
+            {account.currency && (
+              <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{account.currency}</span>
+            )}
+          </div>
         </div>
         <span className={`badge ${statusInfo.class}`}>{statusInfo.label}</span>
       </div>
