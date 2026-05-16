@@ -225,7 +225,7 @@ function AccountFormModal({ account, onClose, onSaved }) {
   const [testResult, setTestResult] = useState(null);
 
   const fields = PLATFORM_FIELDS[platform];
-
+const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id;
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
@@ -247,7 +247,7 @@ function AccountFormModal({ account, onClose, onSaved }) {
   };
 
   const handleSave = async () => {
-    if (!accountName) return toast.error('Vui lòng nhập tên tài khoản');
+  if (!isFacebookBMMode && !accountName) return toast.error('Vui lòng nhập tên tài khoản');
 
     setSaving(true);
     try {
@@ -329,19 +329,31 @@ function AccountFormModal({ account, onClose, onSaved }) {
             </div>
           </div>
 
-          {testResult && (
-            <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-              <div className="font-medium mb-1">{testResult.success ? '✅ Kết nối thành công' : '❌ Kết nối thất bại'}</div>
-              <div className="text-xs">{testResult.message}</div>
-              {testResult.data && (
-                <div className="text-xs mt-2 space-y-0.5">
-                  {Object.entries(testResult.data).map(([k, v]) => (
-                    <div key={k}><span className="text-slate-500">{k}:</span> <span className="font-mono">{v}</span></div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+{testResult && (
+  <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+    <div className="font-medium mb-1">{testResult.success ? '✅ Kết nối thành công' : '❌ Kết nối thất bại'}</div>
+    <div className="text-xs">{testResult.message}</div>
+    {testResult.data?.accounts && (
+      <div className="text-xs mt-2 space-y-1">
+        <div className="font-medium">Tài khoản tìm thấy ({testResult.data.accountsFound}):</div>
+        {testResult.data.accounts.map(a => (
+          <div key={a.id} className="flex gap-2">
+            <span className="font-mono text-slate-600">{a.id}</span>
+            <span>{a.name}</span>
+            <span className="text-slate-400">{a.currency}</span>
+          </div>
+        ))}
+      </div>
+    )}
+    {testResult.data && !testResult.data.accounts && (
+      <div className="text-xs mt-2 space-y-0.5">
+        {Object.entries(testResult.data).map(([k, v]) => (
+          <div key={k}><span className="text-slate-500">{k}:</span> <span className="font-mono">{String(v)}</span></div>
+        ))}
+      </div>
+    )}
+  </div>
+)}
         </div>
 
         <div className="p-5 border-t border-slate-100 flex justify-between gap-2 sticky bottom-0 bg-white rounded-b-2xl">
