@@ -1,13 +1,10 @@
+const facebookAdsService = require('../services/facebookAdsService');
 const { query, transaction } = require('../config/database');
 const { success, error, asyncHandler } = require('../utils/response');
 const { encryptCredentials, decryptCredentials } = require('../utils/encryption');
 const { logEvent, EVENT_TYPES } = require('../utils/audit');
 const { getService, PLATFORMS } = require('../services/platformService');
 
-/**
- * GET /api/accounts
- * Lấy danh sách tài khoản ads đã kết nối
- */
 const listAccounts = asyncHandler(async (req, res) => {
   const { platform } = req.query;
 
@@ -27,29 +24,25 @@ const listAccounts = asyncHandler(async (req, res) => {
   sql += ' ORDER BY platform, account_name';
 
   const result = await query(sql, params);
-
   return success(res, { accounts: result.rows });
 });
 
-/**
- * POST /api/accounts/test
- * Test kết nối trước khi lưu
- */
 const testConnection = asyncHandler(async (req, res) => {
   const { platform, credentials } = req.body;
 
   if (!platform || !PLATFORMS.includes(platform)) {
     return error(res, 'Platform không hợp lệ', 400);
   }
-
   if (!credentials || typeof credentials !== 'object') {
     return error(res, 'Thiếu thông tin credentials', 400);
   }
 
-  // Validate required fields
+  const facebookRequired = credentials.bm_id
+    ? ['access_token', 'bm_id']
+    : ['access_token', 'ad_account_id'];
   const requiredFields = {
     google: ['developer_token', 'client_id', 'client_secret', 'refresh_token', 'customer_id'],
-    facebook: ['app_id', 'app_secret', 'access_token', 'ad_account_id'],
+    facebook: facebookRequired,
     tiktok: ['app_id', 'app_secret', 'access_token', 'advertiser_id'],
   };
 
@@ -74,24 +67,52 @@ const testConnection = asyncHandler(async (req, res) => {
   return success(res, result);
 });
 
-/**
- * POST /api/accounts
- * Tạo tài khoản mới
- */
 const createAccount = asyncHandler(async (req, res) => {
   const { platform, account_name, credentials, account_id, refresh_token } = req.body;
 
   if (!platform || !PLATFORMS.includes(platform)) {
     return error(res, 'Platform không hợp lệ', 400);
   }
-  if (!account_name) {
-    return error(res, 'Vui lòng nhập tên tài khoản', 400);
-  }
   if (!credentials || typeof credentials !== 'object') {
     return error(res, 'Thiếu thông tin credentials', 400);
   }
 
-  // Lấy account_id từ credentials theo platform
+  // BM mode: tự động tìm và thêm tất cả tài khoản ads
+  if (platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id) {
+    const bmEncrypted = encryptCredentials(credentials);
+    const testResult = await facebookAdsService.testConnection(bmEncrypted);
+    if (!testResult.success) return error(res, `Kết nối thất bại: ${testResult.message}`, 400);
+
+    const accounts = await facebookAdsService.getAccessibleAdAccounts(bmEncrypted);
+    if (accounts.length === 0) {
+      return error(res, 'Không tìm thấy tài khoản ads nào trong BM.', 400);
+    }
+
+    const bmLabel = account_name || `BM ${credentials.bm_id}`;
+    const created = [], skipped = [];
+    for (const acc of accounts) {
+      const dup = await query(
+        'SELECT id FROM ad_accounts WHERE platform=$1 AND account_id=$2 AND user_id=$3',
+        ['facebook', acc.id, req.user.id]
+      );
+      if (dup.rowCount > 0) { skipped.push(acc.name); continue; }
+
+      const perAccountEncrypted = encryptCredentials({ ...credentials, ad_account_id: acc.id });
+      const r = await query(
+        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status)
+         VALUES ($1,$2,$3,$4,$5,'active')
+         RETURNING id,uuid,platform,account_name,account_id,status,created_at`,
+        [req.user.id, 'facebook', `${bmLabel} — ${acc.name}`, acc.id, JSON.stringify(perAccountEncrypted)]
+      );
+      created.push(r.rows[0]);
+    }
+    return success(res, { accounts: created, skipped: skipped.length }, `Đã thêm ${created.length} tài khoản Facebook`, 201);
+  }
+
+  if (!account_name) {
+    return error(res, 'Vui lòng nhập tên tài khoản', 400);
+  }
+
   let extractedAccountId = account_id;
   if (!extractedAccountId) {
     if (platform === 'google') extractedAccountId = String(credentials.customer_id || '').replace(/-/g, '');
@@ -103,7 +124,6 @@ const createAccount = asyncHandler(async (req, res) => {
     return error(res, 'Không thể xác định ID tài khoản', 400);
   }
 
-  // Test kết nối trước
   const service = getService(platform);
   const encrypted = encryptCredentials(credentials);
   const testResult = await service.testConnection(encrypted);
@@ -112,7 +132,6 @@ const createAccount = asyncHandler(async (req, res) => {
     return error(res, `Kết nối thất bại: ${testResult.message}`, 400);
   }
 
-  // Kiểm tra trùng
   const existing = await query(
     'SELECT id FROM ad_accounts WHERE platform = $1 AND account_id = $2',
     [platform, extractedAccountId]
@@ -122,9 +141,8 @@ const createAccount = asyncHandler(async (req, res) => {
     return error(res, 'Tài khoản này đã được kết nối trước đó', 409);
   }
 
-  // Lưu vào DB
   const tokenExpiresAt = platform === 'tiktok'
-    ? new Date(Date.now() + 86400 * 1000) // 24h
+    ? new Date(Date.now() + 86400 * 1000)
     : null;
 
   const result = await query(
@@ -132,15 +150,7 @@ const createAccount = asyncHandler(async (req, res) => {
      (user_id, platform, account_name, account_id, credentials, status, last_sync_at, token_expires_at)
      VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)
      RETURNING id, uuid, platform, account_name, account_id, status, created_at`,
-    [
-      req.user.id,
-      platform,
-      account_name,
-      extractedAccountId,
-      JSON.stringify(encrypted),
-      'active',
-      tokenExpiresAt,
-    ]
+    [req.user.id, platform, account_name, extractedAccountId, JSON.stringify(encrypted), 'active', tokenExpiresAt]
   );
 
   await logEvent({
@@ -156,10 +166,6 @@ const createAccount = asyncHandler(async (req, res) => {
   return success(res, { account: result.rows[0] }, 'Kết nối tài khoản thành công', 201);
 });
 
-/**
- * PUT /api/accounts/:id
- * Cập nhật tài khoản
- */
 const updateAccount = asyncHandler(async (req, res) => {
   const { id } = req.params;
   const { account_name, credentials } = req.body;
@@ -184,7 +190,6 @@ const updateAccount = asyncHandler(async (req, res) => {
   }
 
   if (credentials && typeof credentials === 'object') {
-    // Test trước khi cập nhật
     const service = getService(account.platform);
     const encrypted = encryptCredentials(credentials);
     const testResult = await service.testConnection(encrypted);
@@ -218,9 +223,6 @@ const updateAccount = asyncHandler(async (req, res) => {
   return success(res, null, 'Cập nhật thành công');
 });
 
-/**
- * DELETE /api/accounts/:id
- */
 const deleteAccount = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -246,10 +248,6 @@ const deleteAccount = asyncHandler(async (req, res) => {
   return success(res, null, 'Đã xóa tài khoản');
 });
 
-/**
- * POST /api/accounts/:id/test
- * Test lại kết nối tài khoản đã lưu
- */
 const testExistingAccount = asyncHandler(async (req, res) => {
   const { id } = req.params;
 
@@ -266,7 +264,6 @@ const testExistingAccount = asyncHandler(async (req, res) => {
   const service = getService(account.platform);
   const testResult = await service.testConnection(account.credentials);
 
-  // Cập nhật status
   await query(
     'UPDATE ad_accounts SET status = $1, status_message = $2 WHERE id = $3',
     [testResult.success ? 'active' : 'error', testResult.message, id]
