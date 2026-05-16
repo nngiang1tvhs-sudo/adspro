@@ -37,9 +37,46 @@ const apiCall = async (endpoint, accessToken, params = {}) => {
 /**
  * Test kết nối Facebook
  */
+const getAccessibleAdAccounts = async (credentials) => {
+  const decrypted = decryptCredentials(credentials);
+  const token = decrypted.access_token;
+  const bmId = decrypted.bm_id;
+  const accountMap = new Map();
+  const fetchAll = async (endpoint, params = {}) => {
+    const data = await apiCall(endpoint, token, { ...params, limit: 200 });
+    for (const item of data.data || []) accountMap.set(item.id, item);
+  };
+  if (bmId) {
+    try { await fetchAll(`/${bmId}/owned_ad_accounts`, { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('getOwnedAdAccounts failed:', e.message); }
+    try { await fetchAll(`/${bmId}/client_ad_accounts`, { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('getClientAdAccounts failed:', e.message); }
+  }
+  try { await fetchAll('/me/adaccounts', { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('/me/adaccounts failed:', e.message); }
+  return Array.from(accountMap.values());
+};
 const testConnection = async (credentials) => {
   try {
     const decrypted = decryptCredentials(credentials);
+
+    if (!decrypted.ad_account_id) {
+      const me = await apiCall('/me', decrypted.access_token, { fields: 'id,name' });
+      const accounts = await getAccessibleAdAccounts(credentials);
+      return {
+        success: true,
+        message: `Kết nối thành công — tìm thấy ${accounts.length} tài khoản ads`,
+        data: {
+          userId: me.id,
+          name: me.name,
+          accountsFound: accounts.length,
+          accounts: accounts.map(a => ({
+            id: a.id,
+            name: a.name,
+            status: a.account_status,
+            currency: a.currency,
+          })),
+        },
+      };
+    }
+
     const adAccountId = decrypted.ad_account_id.startsWith('act_')
       ? decrypted.ad_account_id
       : `act_${decrypted.ad_account_id}`;
@@ -358,6 +395,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
 
 module.exports = {
   testConnection,
+  getAccessibleAdAccounts,
   getCampaigns,
   getAdSets,
   getAdGroups: getAdSets,
