@@ -354,8 +354,6 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
     )}
   </div>
 )}
-        </div>
-
         <div className="p-5 border-t border-slate-100 flex justify-between gap-2 sticky bottom-0 bg-white rounded-b-2xl">
           <button onClick={handleTest} disabled={testing} className="btn btn-outline">
             <RefreshCw size={14} className={testing ? 'animate-spin' : ''} /> Test kết nối
