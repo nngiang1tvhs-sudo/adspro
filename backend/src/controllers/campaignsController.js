@@ -103,34 +103,61 @@ const listCampaigns = asyncHandler(async (req, res) => {
 
 /**
  * GET /api/campaigns/:id/ad-groups
- * Lấy nhóm quảng cáo của 1 chiến dịch
+ * Lấy nhóm quảng cáo của 1 chiến dịch.
+ * Hỗ trợ 2 cách:
+ * - DB mode: id là integer DB id → JOIN campaigns + ad_accounts
+ * - Direct mode: id là external_id, kèm query params external_id + account_id
  */
 const listAdGroups = asyncHandler(async (req, res) => {
   const { id } = req.params;
+  const { external_id, account_id, date_from, date_to } = req.query;
 
-  // Lấy thông tin campaign + account
+  let campaignExternalId, credentials, platform, campaignName;
+
+  // Thử tìm trong DB trước
   const campResult = await query(
-    `SELECT c.*, a.platform, a.credentials, a.account_name
+    `SELECT c.external_id, c.name, a.platform, a.credentials, a.account_name
      FROM campaigns c
      JOIN ad_accounts a ON c.account_id = a.id
      WHERE c.id = $1 AND a.user_id = $2`,
     [id, req.user.id]
   );
 
-  if (campResult.rowCount === 0) {
-    return error(res, 'Không tìm thấy chiến dịch', 404);
+  if (campResult.rowCount > 0) {
+    const row = campResult.rows[0];
+    campaignExternalId = row.external_id;
+    credentials = row.credentials;
+    platform = row.platform;
+    campaignName = row.name;
+  } else {
+    // Fallback: campaign chưa sync vào DB → dùng external_id + account_id từ query
+    const resolvedExternalId = external_id || id;
+    if (!account_id) {
+      return error(res, 'Không tìm thấy chiến dịch. Hãy đồng bộ dữ liệu trước.', 404);
+    }
+
+    const accResult = await query(
+      'SELECT platform, credentials, account_name FROM ad_accounts WHERE id = $1 AND user_id = $2',
+      [account_id, req.user.id]
+    );
+
+    if (accResult.rowCount === 0) {
+      return error(res, 'Không tìm thấy tài khoản', 404);
+    }
+
+    campaignExternalId = resolvedExternalId;
+    credentials = accResult.rows[0].credentials;
+    platform = accResult.rows[0].platform;
+    campaignName = accResult.rows[0].account_name;
   }
 
-  const campaign = campResult.rows[0];
-  const service = getService(campaign.platform);
-
-  // Lấy data trực tiếp từ API (real-time)
-  const adGroups = await service.getAdGroups(campaign.credentials, campaign.external_id, {
-    from: req.query.date_from,
-    to: req.query.date_to,
+  const service = getService(platform);
+  const adGroups = await service.getAdGroups(credentials, campaignExternalId, {
+    from: date_from,
+    to: date_to,
   });
 
-  return success(res, { adGroups, campaign: { id: campaign.id, name: campaign.name } });
+  return success(res, { adGroups, campaign: { id, name: campaignName } });
 });
 
 /**

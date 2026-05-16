@@ -2,26 +2,13 @@ const axios = require('axios');
 const logger = require('../utils/logger');
 const { decryptCredentials } = require('../utils/encryption');
 
-/**
- * Facebook Marketing API Service
- *
- * Yêu cầu credentials:
- * - app_id: Meta App ID
- * - app_secret: Meta App Secret
- * - access_token: System User Access Token (không hết hạn)
- * - ad_account_id: Ad Account ID (định dạng act_XXXXXXXXX)
- */
-
 const API_VERSION = 'v19.0';
 const BASE_URL = `https://graph.facebook.com/${API_VERSION}`;
 
 const apiCall = async (endpoint, accessToken, params = {}) => {
   try {
     const response = await axios.get(`${BASE_URL}${endpoint}`, {
-      params: {
-        access_token: accessToken,
-        ...params,
-      },
+      params: { access_token: accessToken, ...params },
       timeout: 30000,
     });
     return response.data;
@@ -34,25 +21,26 @@ const apiCall = async (endpoint, accessToken, params = {}) => {
   }
 };
 
-/**
- * Test kết nối Facebook
- */
 const getAccessibleAdAccounts = async (credentials) => {
   const decrypted = decryptCredentials(credentials);
   const token = decrypted.access_token;
   const bmId = decrypted.bm_id;
   const accountMap = new Map();
+
   const fetchAll = async (endpoint, params = {}) => {
     const data = await apiCall(endpoint, token, { ...params, limit: 200 });
     for (const item of data.data || []) accountMap.set(item.id, item);
   };
+
   if (bmId) {
     try { await fetchAll(`/${bmId}/owned_ad_accounts`, { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('getOwnedAdAccounts failed:', e.message); }
     try { await fetchAll(`/${bmId}/client_ad_accounts`, { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('getClientAdAccounts failed:', e.message); }
   }
   try { await fetchAll('/me/adaccounts', { fields: 'id,name,account_status,currency,timezone_name' }); } catch (e) { logger.warn('/me/adaccounts failed:', e.message); }
+
   return Array.from(accountMap.values());
 };
+
 const testConnection = async (credentials) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -67,12 +55,7 @@ const testConnection = async (credentials) => {
           userId: me.id,
           name: me.name,
           accountsFound: accounts.length,
-          accounts: accounts.map(a => ({
-            id: a.id,
-            name: a.name,
-            status: a.account_status,
-            currency: a.currency,
-          })),
+          accounts: accounts.map(a => ({ id: a.id, name: a.name, status: a.account_status, currency: a.currency })),
         },
       };
     }
@@ -98,16 +81,10 @@ const testConnection = async (credentials) => {
     };
   } catch (err) {
     logger.error('Facebook test failed:', err.message);
-    return {
-      success: false,
-      message: err.message || 'Không thể kết nối Facebook Ads',
-    };
+    return { success: false, message: err.message || 'Không thể kết nối Facebook Ads' };
   }
 };
 
-/**
- * Lấy danh sách chiến dịch
- */
 const getCampaigns = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -130,12 +107,9 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       limit: 200,
     });
 
-    const campaigns = data.data || [];
-
-    return campaigns.map(camp => {
+    return (data.data || []).map(camp => {
       const insights = camp.insights?.data?.[0] || {};
       const actions = parseActions(insights.actions || []);
-
       return {
         external_id: camp.id,
         name: camp.name,
@@ -184,9 +158,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
 
 const parseActions = (actions) => {
   const map = {};
-  for (const action of actions) {
-    map[action.action_type] = Number(action.value);
-  }
+  for (const action of actions) map[action.action_type] = Number(action.value);
   return map;
 };
 
@@ -197,9 +169,6 @@ const getROAS = (insights) => {
   return 0;
 };
 
-/**
- * Map Facebook objective sang tiếng Việt
- */
 const mapFacebookObjective = (objective) => {
   const map = {
     'OUTCOME_AWARENESS': 'Nhận thức',
@@ -221,9 +190,6 @@ const mapFacebookObjective = (objective) => {
   return map[objective] || objective || 'Khác';
 };
 
-/**
- * Lấy ad sets của 1 campaign
- */
 const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -274,9 +240,6 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
   }
 };
 
-/**
- * Lấy danh sách ads
- */
 const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -323,25 +286,15 @@ const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
   }
 };
 
-/**
- * Bật/tắt chiến dịch
- */
 const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => {
   try {
     const decrypted = decryptCredentials(credentials);
     const newStatus = enable ? 'ACTIVE' : 'PAUSED';
 
-    const response = await axios.post(
-      `${BASE_URL}/${campaignExternalId}`,
-      null,
-      {
-        params: {
-          access_token: decrypted.access_token,
-          status: newStatus,
-        },
-        timeout: 30000,
-      }
-    );
+    const response = await axios.post(`${BASE_URL}/${campaignExternalId}`, null, {
+      params: { access_token: decrypted.access_token, status: newStatus },
+      timeout: 30000,
+    });
 
     return { success: true, status: newStatus, data: response.data };
   } catch (err) {
@@ -351,9 +304,6 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
   }
 };
 
-/**
- * Lấy số liệu hằng ngày
- */
 const getDailyMetrics = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);

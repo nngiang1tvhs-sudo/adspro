@@ -62,16 +62,13 @@ export default function ConnectPage() {
   );
 }
 
-// ============== Accounts Tab ==============
 function AccountsTab() {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
 
-  useEffect(() => {
-    loadAccounts();
-  }, []);
+  useEffect(() => { loadAccounts(); }, []);
 
   const loadAccounts = async () => {
     setLoading(true);
@@ -168,7 +165,6 @@ function AccountsTab() {
   );
 }
 
-// ============== Account Card ==============
 function AccountCard({ account, onTest, onEdit, onDelete }) {
   const statusInfo = {
     active: { class: 'badge-success', label: 'Đã kết nối', icon: CheckCircle, color: 'text-emerald-500' },
@@ -187,7 +183,12 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
             <h4 className="font-semibold text-slate-800 truncate">{account.account_name}</h4>
             <Icon size={14} className={statusInfo.color} />
           </div>
-          <div className="text-xs text-slate-500 truncate">ID: {account.account_id}</div>
+          <div className="flex items-center gap-1.5 mt-0.5">
+            <span className="text-xs text-slate-500 truncate">ID: {account.account_id}</span>
+            {account.currency && (
+              <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{account.currency}</span>
+            )}
+          </div>
         </div>
         <span className={`badge ${statusInfo.class}`}>{statusInfo.label}</span>
       </div>
@@ -215,7 +216,6 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
   );
 }
 
-// ============== Account Form Modal ==============
 function AccountFormModal({ account, onClose, onSaved }) {
   const [platform, setPlatform] = useState(account?.platform || 'google');
   const [accountName, setAccountName] = useState(account?.account_name || '');
@@ -225,7 +225,8 @@ function AccountFormModal({ account, onClose, onSaved }) {
   const [testResult, setTestResult] = useState(null);
 
   const fields = PLATFORM_FIELDS[platform];
-const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id;
+  const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id;
+
   const handleTest = async () => {
     setTesting(true);
     setTestResult(null);
@@ -247,7 +248,7 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
   };
 
   const handleSave = async () => {
-  if (!isFacebookBMMode && !accountName) return toast.error('Vui lòng nhập tên tài khoản');
+    if (!isFacebookBMMode && !accountName) return toast.error('Vui lòng nhập tên tài khoản');
 
     setSaving(true);
     try {
@@ -259,7 +260,7 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
         toast.success('Đã cập nhật');
       } else {
         await accountsApi.create({ platform, account_name: accountName, credentials });
-        toast.success('Đã thêm tài khoản');
+        toast.success(isFacebookBMMode ? 'Đã thêm tài khoản Facebook từ BM' : 'Đã thêm tài khoản');
       }
       onSaved();
     } catch (err) {
@@ -298,17 +299,24 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
           )}
 
           <div>
-            <label className="label">Tên hiển thị *</label>
+            <label className="label">
+              {isFacebookBMMode ? 'Nhãn Business Manager (không bắt buộc)' : 'Tên hiển thị *'}
+            </label>
             <input
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
               className="input"
-              placeholder="VD: Tài khoản công ty A"
+              placeholder={isFacebookBMMode ? 'VD: BM Công ty A (tự đặt tên nếu để trống)' : 'VD: Tài khoản công ty A'}
             />
           </div>
 
           <div className="border-t border-slate-100 pt-4">
             <div className="text-sm font-semibold text-slate-700 mb-3">Thông tin kết nối</div>
+            {platform === 'facebook' && (
+              <div className="text-xs text-blue-700 bg-blue-50 border border-blue-100 rounded p-2 mb-3">
+                Nhập <strong>Access Token</strong> và <strong>Business Manager ID</strong> — hệ thống sẽ tự động tìm và thêm tất cả tài khoản ads bạn có quyền truy cập.
+              </div>
+            )}
             <div className="space-y-3">
               {fields.map(field => (
                 <div key={field.key}>
@@ -329,31 +337,33 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
             </div>
           </div>
 
-{testResult && (
-  <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
-    <div className="font-medium mb-1">{testResult.success ? '✅ Kết nối thành công' : '❌ Kết nối thất bại'}</div>
-    <div className="text-xs">{testResult.message}</div>
-    {testResult.data?.accounts && (
-      <div className="text-xs mt-2 space-y-1">
-        <div className="font-medium">Tài khoản tìm thấy ({testResult.data.accountsFound}):</div>
-        {testResult.data.accounts.map(a => (
-          <div key={a.id} className="flex gap-2">
-            <span className="font-mono text-slate-600">{a.id}</span>
-            <span>{a.name}</span>
-            <span className="text-slate-400">{a.currency}</span>
-          </div>
-        ))}
-      </div>
-    )}
-    {testResult.data && !testResult.data.accounts && (
-      <div className="text-xs mt-2 space-y-0.5">
-        {Object.entries(testResult.data).map(([k, v]) => (
-          <div key={k}><span className="text-slate-500">{k}:</span> <span className="font-mono">{String(v)}</span></div>
-        ))}
-      </div>
-    )}
-  </div>
-)}
+          {testResult && (
+            <div className={`p-3 rounded-lg text-sm ${testResult.success ? 'bg-emerald-50 text-emerald-800' : 'bg-red-50 text-red-800'}`}>
+              <div className="font-medium mb-1">{testResult.success ? '✅ Kết nối thành công' : '❌ Kết nối thất bại'}</div>
+              <div className="text-xs">{testResult.message}</div>
+              {testResult.data?.accounts && (
+                <div className="text-xs mt-2 space-y-1">
+                  <div className="font-medium">Tài khoản tìm thấy ({testResult.data.accountsFound}):</div>
+                  {testResult.data.accounts.map(a => (
+                    <div key={a.id} className="flex gap-2">
+                      <span className="font-mono text-slate-600">{a.id}</span>
+                      <span>{a.name}</span>
+                      <span className="text-slate-400">{a.currency}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {testResult.data && !testResult.data.accounts && (
+                <div className="text-xs mt-2 space-y-0.5">
+                  {Object.entries(testResult.data).map(([k, v]) => (
+                    <div key={k}><span className="text-slate-500">{k}:</span> <span className="font-mono">{String(v)}</span></div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="p-5 border-t border-slate-100 flex justify-between gap-2 sticky bottom-0 bg-white rounded-b-2xl">
           <button onClick={handleTest} disabled={testing} className="btn btn-outline">
             <RefreshCw size={14} className={testing ? 'animate-spin' : ''} /> Test kết nối
@@ -361,7 +371,7 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
           <div className="flex gap-2">
             <button onClick={onClose} className="btn btn-outline">Hủy</button>
             <button onClick={handleSave} disabled={saving} className="btn btn-primary">
-              {saving ? 'Đang lưu...' : (account ? 'Cập nhật' : 'Thêm')}
+              {saving ? 'Đang lưu...' : (account ? 'Cập nhật' : (isFacebookBMMode ? 'Thêm tất cả tài khoản' : 'Thêm'))}
             </button>
           </div>
         </div>
@@ -370,7 +380,6 @@ const isFacebookBMMode = platform === 'facebook' && credentials.bm_id && !creden
   );
 }
 
-// ============== Email Settings Tab ==============
 function EmailTab() {
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -472,51 +481,28 @@ function EmailTab() {
               <div className="text-sm font-medium">Báo cáo sáng hằng ngày</div>
               <div className="text-xs text-slate-500">Tổng hợp hiệu suất các tài khoản gửi vào buổi sáng</div>
             </div>
-            <input
-              type="checkbox"
-              checked={settings.daily_report_enabled !== false}
-              onChange={(e) => setSettings({ ...settings, daily_report_enabled: e.target.checked })}
-              className="w-4 h-4"
-            />
+            <input type="checkbox" checked={settings.daily_report_enabled !== false} onChange={(e) => setSettings({ ...settings, daily_report_enabled: e.target.checked })} className="w-4 h-4" />
           </label>
-
           <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg cursor-pointer">
             <div>
               <div className="text-sm font-medium">Thông báo khi Rule kích hoạt</div>
               <div className="text-xs text-slate-500">Gửi email mỗi khi rule trigger thực thi</div>
             </div>
-            <input
-              type="checkbox"
-              checked={settings.rule_notification_enabled !== false}
-              onChange={(e) => setSettings({ ...settings, rule_notification_enabled: e.target.checked })}
-              className="w-4 h-4"
-            />
+            <input type="checkbox" checked={settings.rule_notification_enabled !== false} onChange={(e) => setSettings({ ...settings, rule_notification_enabled: e.target.checked })} className="w-4 h-4" />
           </label>
-
           <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg cursor-pointer">
             <div>
               <div className="text-sm font-medium">Cảnh báo Token sắp hết hạn</div>
               <div className="text-xs text-slate-500">Báo trước 7 ngày khi token API sắp hết</div>
             </div>
-            <input
-              type="checkbox"
-              checked={settings.token_expiry_alert_enabled !== false}
-              onChange={(e) => setSettings({ ...settings, token_expiry_alert_enabled: e.target.checked })}
-              className="w-4 h-4"
-            />
+            <input type="checkbox" checked={settings.token_expiry_alert_enabled !== false} onChange={(e) => setSettings({ ...settings, token_expiry_alert_enabled: e.target.checked })} className="w-4 h-4" />
           </label>
-
           <label className="flex items-center justify-between p-3 bg-slate-50 rounded-lg cursor-pointer">
             <div>
               <div className="text-sm font-medium">Cảnh báo lỗi đồng bộ</div>
               <div className="text-xs text-slate-500">Gửi ngay khi không đồng bộ được tài khoản nào đó</div>
             </div>
-            <input
-              type="checkbox"
-              checked={settings.sync_error_alert_enabled === true}
-              onChange={(e) => setSettings({ ...settings, sync_error_alert_enabled: e.target.checked })}
-              className="w-4 h-4"
-            />
+            <input type="checkbox" checked={settings.sync_error_alert_enabled === true} onChange={(e) => setSettings({ ...settings, sync_error_alert_enabled: e.target.checked })} className="w-4 h-4" />
           </label>
         </div>
       </div>

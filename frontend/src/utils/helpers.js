@@ -23,14 +23,22 @@ export const formatNumber = (n) => {
 };
 
 /**
- * Format tiền VNĐ
+ * Format tiền theo currency code (VND, USD, JPY, ...)
  */
 export const formatCurrency = (n, options = {}) => {
   const num = Number(n) || 0;
-  const cur = options.currency || 'VND';
-  const symbols = { VND: 'd', USD: '$', JPY: 'Y', EUR: 'E', KRW: 'W', THB: 'B', GBP: 'P' };
-  const sym = symbols[cur] || cur;
-  return new Intl.NumberFormat('vi-VN').format(Math.round(num)) + ' ' + sym;
+  const cur = (options.currency || options || 'VND').toString().toUpperCase();
+  try {
+    const noDecimal = ['VND', 'JPY', 'KRW', 'IDR'].includes(cur);
+    return new Intl.NumberFormat('vi-VN', {
+      style: 'currency',
+      currency: cur,
+      minimumFractionDigits: noDecimal ? 0 : 2,
+      maximumFractionDigits: noDecimal ? 0 : 2,
+    }).format(num);
+  } catch {
+    return new Intl.NumberFormat('vi-VN').format(Math.round(num)) + ' ' + cur;
+  }
 };
 
 /**

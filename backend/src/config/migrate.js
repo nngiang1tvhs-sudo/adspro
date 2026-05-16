@@ -266,6 +266,9 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+-- Thêm cột currency vào ad_accounts nếu chưa có
+ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
+
 -- Triggers
 DO $$
 BEGIN
