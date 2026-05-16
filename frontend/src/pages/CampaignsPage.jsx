@@ -252,6 +252,8 @@ export default function CampaignsPage() {
       const res = await campaignsApi.getAdGroups(campaign.id, {
         date_from: dateRange.from,
         date_to: dateRange.to,
+        external_id: campaign.external_id,
+        account_id: campaign.account_id,
       });
       setDrillData(res.data.adGroups);
     } catch (err) {
