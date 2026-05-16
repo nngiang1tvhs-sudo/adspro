@@ -88,17 +88,11 @@ const createAccount = asyncHandler(async (req, res) => {
   if (!platform || !PLATFORMS.includes(platform)) {
     return error(res, 'Platform không hợp lệ', 400);
   }
-  if (!account_name) {
-    return error(res, 'Vui lòng nhập tên tài khoản', 400);
-  }
-  if (!credentials || typeof credentials !== 'object') {
-    return error(res, 'Thiếu thông tin credentials', 400);
-  }
   if (!credentials || typeof credentials !== 'object') {
     return error(res, 'Thiếu thông tin credentials', 400);
   }
 
-  // ── THÊM ĐOẠN NÀY VÀO ──────────────────────────────────────────────────
+  // BM mode
   if (platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id) {
     const bmEncrypted = encryptCredentials(credentials);
     const testResult = await facebookAdsService.testConnection(bmEncrypted);
@@ -121,6 +115,51 @@ const createAccount = asyncHandler(async (req, res) => {
     }
     return success(res, { accounts: created, skipped: skipped.length }, `Đã thêm ${created.length} tài khoản Facebook`, 201);
   }
+
+  if (!account_name) {
+    return error(res, 'Vui lòng nhập tên tài khoản', 400);
+  }
+
+  // Lấy account_id từ credentials theo platform
+  let extractedAccountId = account_id;
+  ...const createAccount = asyncHandler(async (req, res) => {
+  const { platform, account_name, credentials, account_id, refresh_token } = req.body;
+
+  if (!platform || !PLATFORMS.includes(platform)) {
+    return error(res, 'Platform không hợp lệ', 400);
+  }
+  if (!credentials || typeof credentials !== 'object') {
+    return error(res, 'Thiếu thông tin credentials', 400);
+  }
+
+  // BM mode
+  if (platform === 'facebook' && credentials.bm_id && !credentials.ad_account_id) {
+    const bmEncrypted = encryptCredentials(credentials);
+    const testResult = await facebookAdsService.testConnection(bmEncrypted);
+    if (!testResult.success) return error(res, `Kết nối thất bại: ${testResult.message}`, 400);
+    const accounts = await facebookAdsService.getAccessibleAdAccounts(bmEncrypted);
+    if (accounts.length === 0) return error(res, 'Không tìm thấy tài khoản ads nào trong BM.', 400);
+    const bmLabel = account_name || `BM ${credentials.bm_id}`;
+    const created = [], skipped = [];
+    for (const acc of accounts) {
+      const dup = await query('SELECT id FROM ad_accounts WHERE platform=$1 AND account_id=$2 AND user_id=$3', ['facebook', acc.id, req.user.id]);
+      if (dup.rowCount > 0) { skipped.push(acc.name); continue; }
+      const perAccountEncrypted = encryptCredentials({ ...credentials, ad_account_id: acc.id });
+      const r = await query(
+        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status)
+         VALUES ($1,$2,$3,$4,$5,'active')
+         RETURNING id,uuid,platform,account_name,account_id,status,created_at`,
+        [req.user.id, 'facebook', `${bmLabel} — ${acc.name}`, acc.id, JSON.stringify(perAccountEncrypted)]
+      );
+      created.push(r.rows[0]);
+    }
+    return success(res, { accounts: created, skipped: skipped.length }, `Đã thêm ${created.length} tài khoản Facebook`, 201);
+  }
+
+  if (!account_name) {
+    return error(res, 'Vui lòng nhập tên tài khoản', 400);
+  }
+
   // Lấy account_id từ credentials theo platform
   let extractedAccountId = account_id;
   if (!extractedAccountId) {
