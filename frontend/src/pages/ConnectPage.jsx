@@ -19,10 +19,10 @@ const PLATFORM_FIELDS = {
     { key: 'login_customer_id', label: 'Login Customer ID (MCC)', type: 'text', optional: true, help: 'ID MCC nếu dùng tài khoản quản lý (không bắt buộc)' },
   ],
   facebook: [
-    { key: 'app_id', label: 'App ID', type: 'text' },
-    { key: 'app_secret', label: 'App Secret', type: 'password' },
-    { key: 'access_token', label: 'System User Access Token', type: 'password', help: 'Token không hết hạn từ Business Settings' },
-    { key: 'ad_account_id', label: 'Ad Account ID', type: 'text', help: 'Định dạng act_XXXXXXXXX' },
+    { key: 'access_token', label: 'System User Access Token', type: 'password', help: 'Token không hết hạn — lấy từ Business Settings → System Users' },
+    { key: 'bm_id', label: 'Business Manager ID', type: 'text', help: 'ID của BM (Business Settings → Business Info)' },
+    { key: 'app_id', label: 'App ID', type: 'text', optional: true },
+    { key: 'app_secret', label: 'App Secret', type: 'password', optional: true },
   ],
   tiktok: [
     { key: 'app_id', label: 'App ID', type: 'text' },
