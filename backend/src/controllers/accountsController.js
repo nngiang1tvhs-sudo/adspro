@@ -88,7 +88,6 @@ const createAccount = asyncHandler(async (req, res) => {
       return error(res, 'Không tìm thấy tài khoản ads nào trong BM.', 400);
     }
 
-    const bmLabel = account_name || `BM ${credentials.bm_id}`;
     const created = [], skipped = [];
     for (const acc of accounts) {
       const dup = await query(
@@ -102,7 +101,7 @@ const createAccount = asyncHandler(async (req, res) => {
         `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status,currency)
          VALUES ($1,$2,$3,$4,$5,'active',$6)
          RETURNING id,uuid,platform,account_name,account_id,status,currency,created_at`,
-        [req.user.id, 'facebook', `${bmLabel} — ${acc.name}`, acc.id, JSON.stringify(perAccountEncrypted), acc.currency || null]
+        [req.user.id, 'facebook', acc.name, acc.id, JSON.stringify(perAccountEncrypted), acc.currency || null]
       );
       created.push(r.rows[0]);
     }
