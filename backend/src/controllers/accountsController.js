@@ -122,7 +122,7 @@ const createAccount = asyncHandler(async (req, res) => {
 
   // Lấy account_id từ credentials theo platform
   let extractedAccountId = account_id;
-  ...const createAccount = asyncHandler(async (req, res) => {
+  const createAccount = asyncHandler(async (req, res) => {
   const { platform, account_name, credentials, account_id, refresh_token } = req.body;
 
   if (!platform || !PLATFORMS.includes(platform)) {
