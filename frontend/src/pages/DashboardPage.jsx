@@ -98,6 +98,10 @@ export default function DashboardPage() {
   const objectives = data?.objectives || [];
   const charts = data?.charts || {};
 
+  // Currency: ưu tiên theo account đã chọn, fallback từ API, fallback VND
+  const selectedAccount = accounts.find(a => String(a.id) === String(accountId));
+  const currency = selectedAccount?.currency || data?.currency || 'VND';
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -179,10 +183,10 @@ export default function DashboardPage() {
                 </div>
 
                 <div className="grid grid-cols-2 lg:grid-cols-1 gap-2">
-                  <StatCard label="Chi tiêu" value={formatCurrency(obj.spend)} size="small" />
+                  <StatCard label="Chi tiêu" value={formatCurrency(obj.spend, obj.currency || currency)} size="small" />
                   <StatCard label="Camp đang chạy" value={obj.active_campaigns} size="small" />
                   <StatCard label={resultLabel} value={formatNumber(obj.results)} color="blue" size="small" />
-                  <StatCard label={costLabel} value={formatCurrency(obj.cost_per_result)} color="blue" size="small" />
+                  <StatCard label={costLabel} value={formatCurrency(obj.cost_per_result, obj.currency || currency)} color="blue" size="small" />
                 </div>
               </div>
             )}

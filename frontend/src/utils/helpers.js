@@ -25,9 +25,13 @@ export const formatNumber = (n) => {
 /**
  * Format tiền theo currency code (VND, USD, JPY, ...)
  */
-export const formatCurrency = (n, options = {}) => {
+export const formatCurrency = (n, currencyOrOptions = 'VND') => {
   const num = Number(n) || 0;
-  const cur = (options.currency || options || 'VND').toString().toUpperCase();
+  const cur = (
+    typeof currencyOrOptions === 'string'
+      ? currencyOrOptions
+      : (currencyOrOptions?.currency || 'VND')
+  ).toUpperCase();
   try {
     const noDecimal = ['VND', 'JPY', 'KRW', 'IDR'].includes(cur);
     return new Intl.NumberFormat('vi-VN', {
@@ -175,7 +179,7 @@ export const DEFAULT_COLUMNS = {
 export const formatCellValue = (value, format, currency) => {
   if (value === null || value === undefined) return '—';
   switch (format) {
-    case 'currency': return formatCurrency(value, { currency });
+    case 'currency': return formatCurrency(value, currency || 'VND');
     case 'percent': return formatPercent(value);
     case 'number': return formatNumber(value);
     case 'roas': return Number(value).toFixed(2) + 'x';
