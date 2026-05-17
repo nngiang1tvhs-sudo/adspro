@@ -64,7 +64,7 @@ export default function CampaignsPage() {
   const [accounts, setAccounts] = useState([]);
   const [groupName, setGroupName] = useState('');
   const [accountId, setAccountId] = useState('');
-  const [status, setStatus] = useState('');
+  const [status, setStatus] = useState('ACTIVE_ALL');
   const [objective, setObjective] = useState('');
   const [search, setSearch] = useState('');
 
