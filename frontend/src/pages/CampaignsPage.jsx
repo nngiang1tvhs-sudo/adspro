@@ -445,12 +445,10 @@ export default function CampaignsPage() {
             className="input pl-9 py-2"
           />
         </div>
-        {accountGroups.length > 0 && (
-          <select value={groupName} onChange={(e) => { setGroupName(e.target.value); setAccountId(''); }} className="input py-2 w-44">
-            <option value="">Tất cả nhóm</option>
-            {accountGroups.map(g => <option key={g} value={g}>{g}</option>)}
-          </select>
-        )}
+        <select value={groupName} onChange={(e) => { setGroupName(e.target.value); setAccountId(''); }} className="input py-2 w-44">
+          <option value="">Tất cả nhóm</option>
+          {accountGroups.map(g => <option key={g} value={g}>{g}</option>)}
+        </select>
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="input py-2 w-44">
           <option value="">Tất cả tài khoản</option>
           {visibleAccounts.map(a => <option key={a.id} value={a.id}>{a.account_name}</option>)}
