@@ -4,7 +4,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 
 const routes = require('./routes');
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
@@ -40,19 +39,12 @@ const loginLimiter = rateLimit({
 });
 app.use('/api/auth/login', loginLimiter);
 
-// ===== SERVE FRONTEND STATIC FILES =====
-const frontendDist = path.join(__dirname, '../../frontend/dist');
-app.use(express.static(frontendDist));
-
 // ===== ROUTES =====
-app.use('/api', routes);
-
-// SPA fallback - tất cả route không phải /api đều trả về index.html
-app.get('*', (req, res) => {
-  if (!req.path.startsWith('/api')) {
-    res.sendFile(path.join(frontendDist, 'index.html'));
-  }
+app.get('/', (req, res) => {
+  res.json({ name: 'AdsPro Backend API', version: '1.0.0', status: 'running', timestamp: new Date().toISOString() });
 });
+
+app.use('/api', routes);
 
 // 404 handler
 app.use(notFoundHandler);
