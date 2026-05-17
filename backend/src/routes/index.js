@@ -30,6 +30,7 @@ router.post('/accounts/:id/test', authenticate, accountsController.testExistingA
 
 // ===== CAMPAIGNS =====
 router.get('/campaigns', authenticate, campaignsController.listCampaigns);
+router.get('/campaigns/targets', authenticate, campaignsController.listTargets);
 router.get('/campaigns/:id/ad-groups', authenticate, campaignsController.listAdGroups);
 router.get('/campaigns/ad-groups/:adGroupId/ads', authenticate, campaignsController.listAds);
 router.post('/campaigns/:id/toggle', authenticate, campaignsController.toggleCampaign);

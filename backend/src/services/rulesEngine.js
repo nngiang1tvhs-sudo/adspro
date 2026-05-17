@@ -299,6 +299,12 @@ const executeRule = async (rule) => {
         targets = r.rows.map(a => ({ ...a, type: 'ad' }));
       }
 
+      // Lọc theo target cụ thể nếu có
+      if (rule.target_mode === 'specific' && Array.isArray(rule.target_ids) && rule.target_ids.length > 0) {
+        const allowedIds = new Set(rule.target_ids.map(t => (typeof t === 'object' ? t.id : t)));
+        targets = targets.filter(t => allowedIds.has(t.id));
+      }
+
       let lastTriggeredAt = rule.last_triggered_at;
 
     for (const target of targets) {

@@ -68,6 +68,7 @@ const createRule = asyncHandler(async (req, res) => {
     platform, account_id, name, description, scope,
     conditions, conditions_logic, actions,
     cooldown_minutes, is_active, email_notify,
+    target_mode, target_ids,
   } = req.body;
 
   // Validate
@@ -98,14 +99,15 @@ const createRule = asyncHandler(async (req, res) => {
 
   const result = await query(
     `INSERT INTO rules
-     (user_id, platform, account_id, name, description, scope, conditions, conditions_logic, actions, cooldown_minutes, is_active, email_notify)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+     (user_id, platform, account_id, name, description, scope, conditions, conditions_logic, actions, cooldown_minutes, is_active, email_notify, target_mode, target_ids)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
      RETURNING *`,
     [
       req.user.id, platform, account_id || null, name, description || null,
       scope, JSON.stringify(conditions), conditions_logic || 'AND',
       JSON.stringify(actions), cooldown_minutes || 60,
       is_active !== false, email_notify !== false,
+      target_mode || 'all', JSON.stringify(target_ids || []),
     ]
   );
 
@@ -140,7 +142,7 @@ const updateRule = asyncHandler(async (req, res) => {
   const params = [];
   let idx = 1;
 
-  const fields = ['name', 'description', 'scope', 'conditions_logic', 'cooldown_minutes', 'is_active', 'email_notify', 'account_id'];
+  const fields = ['name', 'description', 'scope', 'conditions_logic', 'cooldown_minutes', 'is_active', 'email_notify', 'account_id', 'target_mode'];
   for (const field of fields) {
     if (req.body[field] !== undefined) {
       updates.push(`${field} = $${idx++}`);
@@ -155,6 +157,10 @@ const updateRule = asyncHandler(async (req, res) => {
   if (req.body.actions !== undefined) {
     updates.push(`actions = $${idx++}`);
     params.push(JSON.stringify(req.body.actions));
+  }
+  if (req.body.target_ids !== undefined) {
+    updates.push(`target_ids = $${idx++}`);
+    params.push(JSON.stringify(req.body.target_ids));
   }
 
   if (updates.length === 0) {

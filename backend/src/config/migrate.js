@@ -276,6 +276,10 @@ ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
 -- Thêm cột reach vào daily_metrics nếu chưa có
 ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS reach INTEGER DEFAULT 0;
 
+-- Thêm cột target_mode và target_ids cho rules
+ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_mode VARCHAR(20) DEFAULT 'all';
+ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_ids JSONB DEFAULT '[]';
+
 -- Triggers
 DO $$
 BEGIN

@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
 import PlatformTabs from '../components/PlatformTabs';
-import { rulesApi, dashboardApi } from '../services/api';
+import { rulesApi, dashboardApi, campaignsApi } from '../services/api';
 import { PLATFORM_LABELS, timeAgo } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle } from 'lucide-react';
+import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle, Search, CheckSquare } from 'lucide-react';
 
 const METRICS_BY_PLATFORM = {
   google: [
@@ -251,6 +251,11 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
             <span className="badge badge-info text-[10px]">
               {rule.scope === 'campaign' ? 'Chiến dịch' : rule.scope === 'ad_group' ? 'Nhóm QC' : 'QC'}
             </span>
+            {rule.target_mode === 'specific' && rule.target_ids?.length > 0 && (
+              <span className="badge badge-warning text-[10px]">
+                {rule.target_ids.length} {rule.scope === 'campaign' ? 'chiến dịch' : rule.scope === 'ad_group' ? 'nhóm QC' : 'QC'} đã chọn
+              </span>
+            )}
             {rule.email_notify && (
               <span className="badge badge-info text-[10px]"><Mail size={10} className="inline mr-1" /> Email</span>
             )}
@@ -355,6 +360,9 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
   ]);
   const [actions, setActions] = useState(rule?.actions || [{ type: 'notify' }]);
   const [saving, setSaving] = useState(false);
+  const [targetMode, setTargetMode] = useState(rule?.target_mode || 'all');
+  const [selectedTargets, setSelectedTargets] = useState(rule?.target_ids || []);
+  const [showPicker, setShowPicker] = useState(false);
 
   const metrics = METRICS_BY_PLATFORM[platform];
 
@@ -396,6 +404,8 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
         cooldown_minutes: Number(cooldown),
         is_active: isActive,
         email_notify: emailNotify,
+        target_mode: targetMode,
+        target_ids: selectedTargets,
       };
 
       if (rule) {
@@ -464,6 +474,58 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                 Gửi email
               </label>
             </div>
+          </div>
+
+          {/* Target selection */}
+          <div>
+            <label className="label">Áp dụng cho</label>
+            <div className="flex gap-2 mb-2">
+              <button
+                type="button"
+                onClick={() => { setTargetMode('all'); setSelectedTargets([]); }}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 transition-colors ${targetMode === 'all' ? 'border-blue-500 bg-blue-50 text-blue-700' : 'border-slate-200 bg-white text-slate-600'}`}
+              >
+                Tất cả {scope === 'campaign' ? 'chiến dịch' : scope === 'ad_group' ? 'nhóm quảng cáo' : 'quảng cáo'}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setTargetMode('specific'); setShowPicker(true); }}
+                className={`px-3 py-1.5 rounded-lg text-sm border-2 transition-colors ${targetMode === 'specific' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-600'}`}
+              >
+                Chọn cụ thể
+              </button>
+            </div>
+
+            {targetMode === 'specific' && (
+              <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+                {selectedTargets.length === 0 ? (
+                  <div className="text-sm text-violet-600 text-center py-2">
+                    Chưa chọn {scope === 'campaign' ? 'chiến dịch' : scope === 'ad_group' ? 'nhóm quảng cáo' : 'quảng cáo'} nào
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedTargets.slice(0, 5).map(t => (
+                      <span key={t.id} className="bg-white text-violet-700 text-xs px-2 py-1 rounded border border-violet-200 flex items-center gap-1 max-w-[200px]">
+                        <span className="truncate">{t.name}</span>
+                        <button type="button" onClick={() => setSelectedTargets(selectedTargets.filter(x => x.id !== t.id))} className="flex-shrink-0 text-violet-400 hover:text-violet-700">
+                          <X size={10} />
+                        </button>
+                      </span>
+                    ))}
+                    {selectedTargets.length > 5 && (
+                      <span className="text-xs text-violet-600 px-2 py-1">+{selectedTargets.length - 5} khác</span>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setShowPicker(true)}
+                  className="text-xs text-violet-600 hover:text-violet-800 underline"
+                >
+                  {selectedTargets.length === 0 ? '+ Chọn từ danh sách' : 'Sửa danh sách đã chọn'}
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Conditions */}
@@ -610,6 +672,181 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
           <button onClick={onClose} className="btn btn-outline">Hủy</button>
           <button onClick={handleSubmit} disabled={saving} className="btn btn-primary">
             {saving ? 'Đang lưu...' : (rule ? 'Cập nhật' : 'Tạo Rule')}
+          </button>
+        </div>
+
+        {showPicker && (
+          <TargetPickerModal
+            platform={platform}
+            accountId={accountId}
+            scope={scope}
+            selected={selectedTargets}
+            onClose={() => setShowPicker(false)}
+            onSave={(targets) => { setSelectedTargets(targets); setShowPicker(false); }}
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ============== Target Picker Modal ==============
+function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSave }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [checked, setChecked] = useState(() => new Map(selected.map(t => [t.id, t])));
+
+  useEffect(() => {
+    loadItems();
+  }, []);
+
+  const loadItems = async () => {
+    setLoading(true);
+    try {
+      const res = await campaignsApi.getTargets({ platform, account_id: accountId || undefined, scope });
+      setItems(res.data.targets || []);
+    } catch (err) {
+      toast.error('Không thể tải danh sách');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const filtered = items.filter(item =>
+    !search || item.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggle = (item) => {
+    const next = new Map(checked);
+    if (next.has(item.id)) {
+      next.delete(item.id);
+    } else {
+      next.set(item.id, { id: item.id, name: item.name, status: item.status });
+    }
+    setChecked(next);
+  };
+
+  const toggleAll = () => {
+    if (filtered.every(item => checked.has(item.id))) {
+      const next = new Map(checked);
+      filtered.forEach(item => next.delete(item.id));
+      setChecked(next);
+    } else {
+      const next = new Map(checked);
+      filtered.forEach(item => next.set(item.id, { id: item.id, name: item.name, status: item.status }));
+      setChecked(next);
+    }
+  };
+
+  const isActive = (status) => ['ENABLED', 'ACTIVE', 'ENABLE', 'enable', 'active'].includes(status);
+
+  const selectedList = [...checked.values()];
+  const scopeLabel = scope === 'campaign' ? 'chiến dịch' : scope === 'ad_group' ? 'nhóm quảng cáo' : 'quảng cáo';
+
+  return (
+    <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '80vh' }}>
+        {/* Header */}
+        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
+          <h3 className="font-semibold text-slate-800">Chọn {scopeLabel}</h3>
+          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded"><X size={18} /></button>
+        </div>
+
+        <div className="flex flex-1 min-h-0">
+          {/* Left: list */}
+          <div className="flex-1 border-r border-slate-100 flex flex-col min-h-0">
+            {/* Search */}
+            <div className="p-3 border-b border-slate-100">
+              <div className="relative">
+                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder={`Tìm kiếm theo tên ${scopeLabel}`}
+                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
+                />
+              </div>
+            </div>
+
+            {/* Count + select all */}
+            <div className="px-3 py-2 flex items-center justify-between border-b border-slate-50">
+              <span className="text-xs text-slate-500">
+                {loading ? 'Đang tải...' : `${filtered.length}/${items.length} ${scopeLabel}`}
+              </span>
+              {!loading && filtered.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleAll}
+                  className="text-xs text-blue-600 hover:underline"
+                >
+                  {filtered.every(item => checked.has(item.id)) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
+                </button>
+              )}
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="text-center py-8 text-slate-400 text-sm">Đang tải...</div>
+              ) : filtered.length === 0 ? (
+                <div className="text-center py-8 text-slate-400 text-sm">
+                  {items.length === 0 ? `Chưa có ${scopeLabel} nào trong DB. Hãy đồng bộ dữ liệu trước.` : 'Không tìm thấy kết quả'}
+                </div>
+              ) : (
+                filtered.map(item => (
+                  <label
+                    key={item.id}
+                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 border-b border-slate-50 ${checked.has(item.id) ? 'bg-blue-50' : ''}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked.has(item.id)}
+                      onChange={() => toggle(item)}
+                      className="w-4 h-4 rounded text-blue-600"
+                    />
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive(item.status) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <div className="flex-1 min-w-0">
+                      <div className="text-xs font-medium text-slate-700 truncate">{item.name}</div>
+                      {item.parent_name && (
+                        <div className="text-[10px] text-slate-400 truncate">{item.parent_name}</div>
+                      )}
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* Right: selected */}
+          <div className="w-52 flex flex-col min-h-0">
+            <div className="p-3 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-xs font-medium text-slate-600">Đã chọn {selectedList.length} mục</span>
+              {selectedList.length > 0 && (
+                <button type="button" onClick={() => setChecked(new Map())} className="text-xs text-red-500 hover:underline">
+                  Xoá tất cả
+                </button>
+              )}
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {selectedList.map(t => (
+                <div key={t.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-50 group">
+                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive(t.status) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                  <span className="flex-1 text-xs text-slate-700 truncate">{t.name}</span>
+                  <button type="button" onClick={() => toggle(t)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500">
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
+          <button type="button" onClick={onClose} className="btn btn-outline btn-sm">Hủy</button>
+          <button type="button" onClick={() => onSave(selectedList)} className="btn btn-primary btn-sm">
+            Xong ({selectedList.length} đã chọn)
           </button>
         </div>
       </div>

@@ -275,10 +275,66 @@ const syncCampaigns = asyncHandler(async (req, res) => {
   return success(res, { results }, `Đã đồng bộ ${results.length} tài khoản`);
 });
 
+/**
+ * GET /api/campaigns/targets
+ * Lấy danh sách chiến dịch/nhóm/quảng cáo từ DB để chọn target cho rule
+ */
+const listTargets = asyncHandler(async (req, res) => {
+  const { platform, account_id, scope } = req.query;
+
+  if (!platform || !PLATFORMS.includes(platform)) {
+    return error(res, 'Platform không hợp lệ', 400);
+  }
+
+  let sql, params;
+  const baseParams = [req.user.id, platform];
+
+  if (scope === 'ad_group') {
+    sql = `
+      SELECT ag.id, ag.name, ag.status, ag.external_id,
+             c.name as parent_name
+      FROM ad_groups ag
+      JOIN campaigns c ON ag.campaign_id = c.id
+      JOIN ad_accounts a ON ag.account_id = a.id
+      WHERE a.user_id = $1 AND a.platform = $2
+    `;
+    params = [...baseParams];
+    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
+    sql += ' ORDER BY c.name, ag.name LIMIT 500';
+  } else if (scope === 'ad') {
+    sql = `
+      SELECT ads.id, ads.name, ads.status, ads.external_id,
+             c.name as parent_name
+      FROM ads
+      JOIN campaigns c ON ads.campaign_id = c.id
+      JOIN ad_accounts a ON ads.account_id = a.id
+      WHERE a.user_id = $1 AND a.platform = $2
+    `;
+    params = [...baseParams];
+    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
+    sql += ' ORDER BY c.name, ads.name LIMIT 500';
+  } else {
+    sql = `
+      SELECT c.id, c.name, c.status, c.external_id,
+             a.account_name as parent_name
+      FROM campaigns c
+      JOIN ad_accounts a ON c.account_id = a.id
+      WHERE a.user_id = $1 AND a.platform = $2
+    `;
+    params = [...baseParams];
+    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
+    sql += ' ORDER BY a.account_name, c.name LIMIT 1000';
+  }
+
+  const result = await query(sql, params);
+  return success(res, { targets: result.rows });
+});
+
 module.exports = {
   listCampaigns,
   listAdGroups,
   listAds,
   toggleCampaign,
   syncCampaigns,
+  listTargets,
 };
