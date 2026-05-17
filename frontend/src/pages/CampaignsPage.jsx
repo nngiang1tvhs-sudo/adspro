@@ -62,6 +62,7 @@ export default function CampaignsPage() {
   const [platform, setPlatform] = useState('google');
   const [dateRange, setDateRange] = useState(DATE_PRESETS[4].getValue());
   const [accounts, setAccounts] = useState([]);
+  const [groupName, setGroupName] = useState('');
   const [accountId, setAccountId] = useState('');
   const [status, setStatus] = useState('');
   const [objective, setObjective] = useState('');
@@ -94,13 +95,15 @@ export default function CampaignsPage() {
   useEffect(() => {
     setColumns(DEFAULT_COLUMNS[platform]);
     setActivePreset('default');
+    setGroupName('');
+    setAccountId('');
     loadAccounts();
     loadPresets();
   }, [platform]);
 
   useEffect(() => {
     loadCampaigns();
-  }, [platform, accountId, status, objective, search, dateRange]);
+  }, [platform, accountId, dateRange]);
 
   const loadAccounts = async () => {
     try {
@@ -122,9 +125,6 @@ export default function CampaignsPage() {
       const res = await campaignsApi.list({
         platform,
         account_id: accountId || undefined,
-        status: status || undefined,
-        objective: objective || undefined,
-        search: search || undefined,
         date_from: dateRange.from,
         date_to: dateRange.to,
       });
@@ -136,6 +136,26 @@ export default function CampaignsPage() {
       setLoading(false);
     }
   };
+
+  // Các nhóm tài khoản có trong platform hiện tại
+  const accountGroups = [...new Set(accounts.map(a => a.group_name).filter(Boolean))].sort();
+
+  // Tài khoản hiển thị trong dropdown (lọc theo nhóm nếu đã chọn)
+  const visibleAccounts = groupName ? accounts.filter(a => a.group_name === groupName) : accounts;
+
+  // Lọc campaign client-side
+  const displayCampaigns = campaigns.filter(c => {
+    if (groupName && !accountId) {
+      const groupAccountIds = new Set(accounts.filter(a => a.group_name === groupName).map(a => a.id));
+      if (!groupAccountIds.has(c.account_id)) return false;
+    }
+    if (search && !c.name.toLowerCase().includes(search.toLowerCase())) return false;
+    if (objective && c.objective !== objective) return false;
+    if (status === 'ACTIVE_ALL') return ['ENABLED', 'ACTIVE', 'ENABLE'].includes(c.status);
+    if (status === 'PAUSED_ALL') return ['PAUSED', 'PAUSE', 'DISABLE'].includes(c.status);
+    if (status === 'REMOVED_ALL') return ['REMOVED', 'DELETED', 'ARCHIVED'].includes(c.status);
+    return true;
+  });
 
   const handleSync = async () => {
     setLoading(true);
@@ -396,7 +416,7 @@ export default function CampaignsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Chien dich</h1>
           <p className="text-sm text-slate-500 mt-0.5">
-            {summary.active || 0} chien dich dang hoat dong - Tong {summary.total || 0}
+            {displayCampaigns.filter(c => ['ENABLED','ACTIVE','ENABLE'].includes(c.status)).length} chiến dịch đang hoạt động - Tổng {displayCampaigns.length}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -421,22 +441,28 @@ export default function CampaignsPage() {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Tim chien dich..."
+            placeholder="Tìm chiến dịch..."
             className="input pl-9 py-2"
           />
         </div>
+        {accountGroups.length > 0 && (
+          <select value={groupName} onChange={(e) => { setGroupName(e.target.value); setAccountId(''); }} className="input py-2 w-44">
+            <option value="">Tất cả nhóm</option>
+            {accountGroups.map(g => <option key={g} value={g}>{g}</option>)}
+          </select>
+        )}
         <select value={accountId} onChange={(e) => setAccountId(e.target.value)} className="input py-2 w-44">
-          <option value="">Tat ca tai khoan</option>
-          {accounts.map(a => <option key={a.id} value={a.id}>{a.account_name}</option>)}
+          <option value="">Tất cả tài khoản</option>
+          {visibleAccounts.map(a => <option key={a.id} value={a.id}>{a.account_name}</option>)}
         </select>
-        <select value={status} onChange={(e) => setStatus(e.target.value)} className="input py-2 w-44">
-          <option value="">Tat ca trang thai</option>
-          <option value="ENABLED">Dang chay (Google)</option>
-          <option value="ACTIVE">Dang chay (FB/TT)</option>
-          <option value="PAUSED">Tam dung</option>
+        <select value={status} onChange={(e) => setStatus(e.target.value)} className="input py-2 w-36">
+          <option value="">Tất cả</option>
+          <option value="ACTIVE_ALL">Đang chạy</option>
+          <option value="PAUSED_ALL">Tạm dừng</option>
+          <option value="REMOVED_ALL">Đã xóa</option>
         </select>
         <select value={objective} onChange={(e) => setObjective(e.target.value)} className="input py-2 w-44">
-          <option value="">Tat ca muc tieu</option>
+          <option value="">Tất cả mục tiêu</option>
           {[...new Set(campaigns.map(c => c.objective).filter(Boolean))].map(obj => (
             <option key={obj} value={obj}>{obj}</option>
           ))}
@@ -568,11 +594,11 @@ export default function CampaignsPage() {
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
             {loading ? (
-              <div className="text-center py-12 text-slate-400">Dang tai...</div>
-            ) : campaigns.length === 0 ? (
+              <div className="text-center py-12 text-slate-400">Đang tải...</div>
+            ) : displayCampaigns.length === 0 ? (
               <div className="text-center py-12 text-slate-400">
-                <div>Chua co chien dich nao</div>
-                <div className="text-xs mt-1">Hay dong bo data tu tai khoan da ket noi</div>
+                <div>Chưa có chiến dịch nào</div>
+                <div className="text-xs mt-1">Hãy đồng bộ data từ tài khoản đã kết nối</div>
               </div>
             ) : (
               <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleColumnDrag}>
@@ -585,7 +611,7 @@ export default function CampaignsPage() {
                     </SortableContext>
                   </thead>
                   <tbody>
-                    {campaigns.map(camp => (
+                    {displayCampaigns.map(camp => (
                       <tr key={camp.id} className="hover:bg-slate-50">
                         {visibleColumns.map(col => (
                           <td key={col.key} className="px-3 py-2.5 border-b border-slate-100 whitespace-nowrap">
@@ -671,24 +697,33 @@ export default function CampaignsPage() {
       )}
 
       {/* Summary */}
-      {!drillDown && campaigns.length > 0 && (
+      {!drillDown && displayCampaigns.length > 0 && (
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <div className="card p-3 text-center">
-            <div className="text-[10px] text-slate-400">Ngan sach/ngay</div>
-            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalBudget, 'currency', campaigns[0]?.currency)}</div>
-          </div>
-          <div className="card p-3 text-center">
-            <div className="text-[10px] text-slate-400">Da chi tieu</div>
-            <div className="text-lg font-semibold mt-1">{formatCellValue(summary.totalSpend, 'currency', campaigns[0]?.currency)}</div>
-          </div>
-          <div className="card p-3 text-center">
-            <div className="text-[10px] text-slate-400">Tong ket qua</div>
-            <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(summary.totalResults, 'number')}</div>
-          </div>
-          <div className="card p-3 text-center">
-            <div className="text-[10px] text-slate-400">CP/KQ trung binh</div>
-            <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(summary.avgCostPerResult, 'currency', campaigns[0]?.currency)}</div>
-          </div>
+          {(() => {
+            const cur = displayCampaigns[0]?.currency;
+            const totalBudget = displayCampaigns.reduce((s, c) => s + Number(c.budget || 0), 0);
+            const totalSpend = displayCampaigns.reduce((s, c) => s + Number(c.metrics?.spend || 0), 0);
+            const totalResults = displayCampaigns.reduce((s, c) => s + Number(c.metrics?.video_views || c.metrics?.conversions || c.metrics?.engagements || c.metrics?.messages || 0), 0);
+            const avgCPR = totalResults > 0 ? totalSpend / totalResults : 0;
+            return <>
+              <div className="card p-3 text-center">
+                <div className="text-[10px] text-slate-400">Ngân sách/ngày</div>
+                <div className="text-lg font-semibold mt-1">{formatCellValue(totalBudget, 'currency', cur)}</div>
+              </div>
+              <div className="card p-3 text-center">
+                <div className="text-[10px] text-slate-400">Đã chi tiêu</div>
+                <div className="text-lg font-semibold mt-1">{formatCellValue(totalSpend, 'currency', cur)}</div>
+              </div>
+              <div className="card p-3 text-center">
+                <div className="text-[10px] text-slate-400">Tổng kết quả</div>
+                <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(totalResults, 'number')}</div>
+              </div>
+              <div className="card p-3 text-center">
+                <div className="text-[10px] text-slate-400">CP/KQ trung bình</div>
+                <div className="text-lg font-semibold mt-1 text-blue-600">{formatCellValue(avgCPR, 'currency', cur)}</div>
+              </div>
+            </>;
+          })()}
         </div>
       )}
     </div>
