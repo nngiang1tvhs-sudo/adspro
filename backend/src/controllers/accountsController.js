@@ -9,7 +9,7 @@ const listAccounts = asyncHandler(async (req, res) => {
   const { platform } = req.query;
 
   let sql = `
-    SELECT id, uuid, platform, account_name, account_id, currency, status, status_message,
+    SELECT id, uuid, platform, account_name, account_id, currency, group_name, status, status_message,
            last_sync_at, token_expires_at, created_at, updated_at
     FROM ad_accounts
     WHERE user_id = $1
@@ -21,7 +21,7 @@ const listAccounts = asyncHandler(async (req, res) => {
     params.push(platform);
   }
 
-  sql += ' ORDER BY platform, account_name';
+  sql += ' ORDER BY platform, group_name NULLS LAST, account_name';
 
   const result = await query(sql, params);
   return success(res, { accounts: result.rows });
@@ -68,7 +68,7 @@ const testConnection = asyncHandler(async (req, res) => {
 });
 
 const createAccount = asyncHandler(async (req, res) => {
-  const { platform, account_name, credentials, account_id, refresh_token } = req.body;
+  const { platform, account_name, credentials, account_id, refresh_token, group_name } = req.body;
 
   if (!platform || !PLATFORMS.includes(platform)) {
     return error(res, 'Platform không hợp lệ', 400);
@@ -98,10 +98,10 @@ const createAccount = asyncHandler(async (req, res) => {
 
       const perAccountEncrypted = encryptCredentials({ ...credentials, ad_account_id: acc.id });
       const r = await query(
-        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status,currency)
-         VALUES ($1,$2,$3,$4,$5,'active',$6)
-         RETURNING id,uuid,platform,account_name,account_id,status,currency,created_at`,
-        [req.user.id, 'facebook', acc.name, acc.id, JSON.stringify(perAccountEncrypted), acc.currency || null]
+        `INSERT INTO ad_accounts (user_id,platform,account_name,account_id,credentials,status,currency,group_name)
+         VALUES ($1,$2,$3,$4,$5,'active',$6,$7)
+         RETURNING id,uuid,platform,account_name,account_id,status,currency,group_name,created_at`,
+        [req.user.id, 'facebook', acc.name, acc.id, JSON.stringify(perAccountEncrypted), acc.currency || null, group_name || null]
       );
       created.push(r.rows[0]);
     }
@@ -148,10 +148,10 @@ const createAccount = asyncHandler(async (req, res) => {
 
   const result = await query(
     `INSERT INTO ad_accounts
-     (user_id, platform, account_name, account_id, credentials, status, currency, last_sync_at, token_expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, NULL, $8)
-     RETURNING id, uuid, platform, account_name, account_id, status, currency, created_at`,
-    [req.user.id, platform, account_name, extractedAccountId, JSON.stringify(encrypted), 'active', currency, tokenExpiresAt]
+     (user_id, platform, account_name, account_id, credentials, status, currency, group_name, last_sync_at, token_expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NULL, $9)
+     RETURNING id, uuid, platform, account_name, account_id, status, currency, group_name, created_at`,
+    [req.user.id, platform, account_name, extractedAccountId, JSON.stringify(encrypted), 'active', currency, group_name || null, tokenExpiresAt]
   );
 
   await logEvent({
@@ -169,7 +169,7 @@ const createAccount = asyncHandler(async (req, res) => {
 
 const updateAccount = asyncHandler(async (req, res) => {
   const { id } = req.params;
-  const { account_name, credentials } = req.body;
+  const { account_name, credentials, group_name } = req.body;
 
   const existing = await query(
     'SELECT * FROM ad_accounts WHERE id = $1 AND user_id = $2',
@@ -188,6 +188,11 @@ const updateAccount = asyncHandler(async (req, res) => {
   if (account_name) {
     updates.push(`account_name = $${idx++}`);
     params.push(account_name);
+  }
+
+  if (group_name !== undefined) {
+    updates.push(`group_name = $${idx++}`);
+    params.push(group_name || null);
   }
 
   if (credentials && typeof credentials === 'object') {

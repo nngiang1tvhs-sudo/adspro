@@ -108,8 +108,15 @@ function AccountsTab() {
     }
   };
 
-  const groupedAccounts = PLATFORMS.reduce((acc, p) => {
-    acc[p] = accounts.filter(a => a.platform === p);
+  const groupedByPlatform = PLATFORMS.reduce((acc, p) => {
+    const platformAccounts = accounts.filter(a => a.platform === p);
+    const groups = {};
+    for (const a of platformAccounts) {
+      const key = a.group_name || '';
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(a);
+    }
+    acc[p] = { total: platformAccounts.length, groups };
     return acc;
   }, {});
 
@@ -130,22 +137,34 @@ function AccountsTab() {
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
                 <h3 className="font-semibold text-slate-700">{PLATFORM_LABELS[platform]}</h3>
-                <span className="text-xs text-slate-400">({groupedAccounts[platform].length})</span>
+                <span className="text-xs text-slate-400">({groupedByPlatform[platform].total})</span>
               </div>
-              {groupedAccounts[platform].length === 0 ? (
+              {groupedByPlatform[platform].total === 0 ? (
                 <div className="card p-6 text-center text-sm text-slate-400">
                   Chưa có tài khoản {PLATFORM_LABELS[platform]} nào
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {groupedAccounts[platform].map(account => (
-                    <AccountCard
-                      key={account.id}
-                      account={account}
-                      onTest={() => handleTest(account)}
-                      onEdit={() => { setEditing(account); setShowForm(true); }}
-                      onDelete={() => handleDelete(account)}
-                    />
+                <div className="space-y-3">
+                  {Object.entries(groupedByPlatform[platform].groups).sort(([a], [b]) => a.localeCompare(b)).map(([groupName, groupAccounts]) => (
+                    <div key={groupName}>
+                      {groupName && (
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{groupName}</span>
+                          <span className="text-xs text-slate-400">({groupAccounts.length})</span>
+                        </div>
+                      )}
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                        {groupAccounts.map(account => (
+                          <AccountCard
+                            key={account.id}
+                            account={account}
+                            onTest={() => handleTest(account)}
+                            onEdit={() => { setEditing(account); setShowForm(true); }}
+                            onDelete={() => handleDelete(account)}
+                          />
+                        ))}
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}
@@ -183,10 +202,13 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
             <h4 className="font-semibold text-slate-800 truncate">{account.account_name}</h4>
             <Icon size={14} className={statusInfo.color} />
           </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
             <span className="text-xs text-slate-500 truncate">ID: {account.account_id}</span>
             {account.currency && (
               <span className="text-[10px] font-semibold bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded">{account.currency}</span>
+            )}
+            {account.group_name && (
+              <span className="text-[10px] font-semibold bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">{account.group_name}</span>
             )}
           </div>
         </div>
@@ -219,6 +241,7 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
 function AccountFormModal({ account, onClose, onSaved }) {
   const [platform, setPlatform] = useState(account?.platform || 'google');
   const [accountName, setAccountName] = useState(account?.account_name || '');
+  const [groupName, setGroupName] = useState(account?.group_name || '');
   const [credentials, setCredentials] = useState({});
   const [testing, setTesting] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -255,11 +278,12 @@ function AccountFormModal({ account, onClose, onSaved }) {
       if (account) {
         await accountsApi.update(account.id, {
           account_name: accountName,
+          group_name: groupName || null,
           credentials: Object.keys(credentials).length > 0 ? credentials : undefined,
         });
         toast.success('Đã cập nhật');
       } else {
-        await accountsApi.create({ platform, account_name: accountName, credentials });
+        await accountsApi.create({ platform, account_name: accountName, group_name: groupName || null, credentials });
         toast.success(isFacebookBMMode ? 'Đã thêm tài khoản Facebook từ BM' : 'Đã thêm tài khoản');
       }
       onSaved();
@@ -298,16 +322,27 @@ function AccountFormModal({ account, onClose, onSaved }) {
             </div>
           )}
 
-          <div>
-            <label className="label">
-              {isFacebookBMMode ? 'Nhãn Business Manager (không bắt buộc)' : 'Tên hiển thị *'}
-            </label>
-            <input
-              value={accountName}
-              onChange={(e) => setAccountName(e.target.value)}
-              className="input"
-              placeholder={isFacebookBMMode ? 'VD: BM Công ty A (tự đặt tên nếu để trống)' : 'VD: Tài khoản công ty A'}
-            />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">
+                {isFacebookBMMode ? 'Nhãn BM (không bắt buộc)' : 'Tên hiển thị *'}
+              </label>
+              <input
+                value={accountName}
+                onChange={(e) => setAccountName(e.target.value)}
+                className="input"
+                placeholder={isFacebookBMMode ? 'VD: BM Công ty A' : 'VD: Tài khoản công ty A'}
+              />
+            </div>
+            <div>
+              <label className="label">Nhóm tài khoản (không bắt buộc)</label>
+              <input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="input"
+                placeholder="VD: Công ty A, Khách hàng B..."
+              />
+            </div>
           </div>
 
           <div className="border-t border-slate-100 pt-4">

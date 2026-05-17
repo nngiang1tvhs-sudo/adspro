@@ -269,6 +269,9 @@ $$ LANGUAGE plpgsql;
 -- Thêm cột currency vào ad_accounts nếu chưa có
 ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
 
+-- Thêm cột group_name để nhóm tài khoản
+ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
+
 -- Triggers
 DO $$
 BEGIN
