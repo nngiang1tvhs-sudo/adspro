@@ -175,9 +175,9 @@ const getAccountsForPlatform = asyncHandler(async (req, res) => {
   const { platform } = req.params;
 
   const result = await query(
-    `SELECT id, account_name, account_id, status FROM ad_accounts
+    `SELECT id, account_name, account_id, status, group_name FROM ad_accounts
      WHERE user_id = $1 AND platform = $2
-     ORDER BY account_name`,
+     ORDER BY group_name NULLS LAST, account_name`,
     [req.user.id, platform]
   );
 
