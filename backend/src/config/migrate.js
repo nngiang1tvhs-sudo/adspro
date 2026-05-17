@@ -280,6 +280,25 @@ ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS reach INTEGER DEFAULT 0;
 ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_mode VARCHAR(20) DEFAULT 'all';
 ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_ids JSONB DEFAULT '[]';
 
+-- Xoá duplicate rows trong daily_metrics (giữ lại row có id nhỏ nhất cho mỗi account+campaign+date)
+DELETE FROM daily_metrics
+WHERE id NOT IN (
+  SELECT MIN(id)
+  FROM daily_metrics
+  GROUP BY account_id, campaign_id, date
+);
+
+-- Thêm UNIQUE constraint để ngăn duplicate trong tương lai
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_daily_metrics_account_campaign_date'
+  ) THEN
+    ALTER TABLE daily_metrics ADD CONSTRAINT uq_daily_metrics_account_campaign_date
+      UNIQUE (account_id, campaign_id, date);
+  END IF;
+END$$;
+
 -- Triggers
 DO $$
 BEGIN

@@ -95,7 +95,12 @@ export default function DashboardPage() {
     }
   };
 
-  const objectives = data?.objectives || [];
+  const objectives = (data?.objectives || []).slice().sort((a, b) => {
+    const aHas = (a.spend || 0) > 0 || (a.active_campaigns || 0) > 0 ? 1 : 0;
+    const bHas = (b.spend || 0) > 0 || (b.active_campaigns || 0) > 0 ? 1 : 0;
+    if (bHas !== aHas) return bHas - aHas;
+    return (b.spend || 0) - (a.spend || 0);
+  });
   const charts = data?.charts || {};
 
   // Currency: ưu tiên theo account đã chọn, fallback từ API, fallback VND

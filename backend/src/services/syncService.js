@@ -87,23 +87,26 @@ const syncAccount = async (accountId, options = {}) => {
       const externalToDbMap = {};
       campMap.rows.forEach(c => { externalToDbMap[c.external_id] = c.id; });
 
-      // Xóa daily metrics cũ trong khoảng thời gian này
-      if (options.dateRange?.from && options.dateRange?.to) {
-        await query(
-          'DELETE FROM daily_metrics WHERE account_id = $1 AND date BETWEEN $2 AND $3',
-          [accountId, options.dateRange.from, options.dateRange.to]
-        );
-      }
-
-      // Insert mới
+      // Upsert daily metrics (tránh duplicate khi sync nhiều lần trong ngày)
       for (const dm of dailyMetrics) {
         const dbCampaignId = externalToDbMap[dm.campaign_external_id];
         if (!dbCampaignId) continue;
 
         await query(
           `INSERT INTO daily_metrics
-           (account_id, campaign_id, date, spend, impressions, clicks, conversions, video_views, follows, messages, raw_metrics)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+           (account_id, campaign_id, date, spend, impressions, clicks, conversions, video_views, follows, messages, engagements, reach, raw_metrics)
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+           ON CONFLICT (account_id, campaign_id, date) DO UPDATE SET
+             spend        = EXCLUDED.spend,
+             impressions  = EXCLUDED.impressions,
+             clicks       = EXCLUDED.clicks,
+             conversions  = EXCLUDED.conversions,
+             video_views  = EXCLUDED.video_views,
+             follows      = EXCLUDED.follows,
+             messages     = EXCLUDED.messages,
+             engagements  = EXCLUDED.engagements,
+             reach        = EXCLUDED.reach,
+             raw_metrics  = EXCLUDED.raw_metrics`,
           [
             accountId,
             dbCampaignId,
@@ -115,6 +118,8 @@ const syncAccount = async (accountId, options = {}) => {
             dm.video_views || 0,
             dm.follows || 0,
             dm.messages || 0,
+            dm.engagements || 0,
+            dm.reach || 0,
             JSON.stringify(dm),
           ]
         );
