@@ -95,6 +95,15 @@ const getMetricValue = async (object, metric, timeRange, account) => {
   return Number(result.rows[0]?.val || 0);
 };
 
+const STRING_OPS = {
+  contains:     (name, val) => name.toLowerCase().includes(val.toLowerCase()),
+  not_contains: (name, val) => !name.toLowerCase().includes(val.toLowerCase()),
+  starts_with:  (name, val) => name.toLowerCase().startsWith(val.toLowerCase()),
+  ends_with:    (name, val) => name.toLowerCase().endsWith(val.toLowerCase()),
+  equals:       (name, val) => name.toLowerCase() === val.toLowerCase(),
+  not_equals:   (name, val) => name.toLowerCase() !== val.toLowerCase(),
+};
+
 /**
  * Đánh giá 1 condition
  */
@@ -108,6 +117,15 @@ const evaluateCondition = async (condition, object, account) => {
     const startMin = sH * 60 + sM;
     const endMin = eH * 60 + eM;
     return currentMinutes >= startMin && currentMinutes <= endMin;
+  }
+
+  if (condition.metric === 'name') {
+    const nameOp = STRING_OPS[condition.operator];
+    if (!nameOp) return false;
+    const objectName = object.name || '';
+    const condValue = String(condition.value || '');
+    if (!condValue) return false;
+    return nameOp(objectName, condValue);
   }
 
   const value = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account);

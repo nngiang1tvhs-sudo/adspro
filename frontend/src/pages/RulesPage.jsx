@@ -7,6 +7,7 @@ import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle } from 'lu
 
 const METRICS_BY_PLATFORM = {
   google: [
+    { key: 'name', label: 'Tên (chứa/không chứa)', type: 'text' },
     { key: 'spend', label: 'Chi phí' },
     { key: 'impressions', label: 'Lượt hiển thị' },
     { key: 'clicks', label: 'Lượt nhấp' },
@@ -21,6 +22,7 @@ const METRICS_BY_PLATFORM = {
     { key: 'time', label: 'Thời gian (khung giờ)' },
   ],
   facebook: [
+    { key: 'name', label: 'Tên (chứa/không chứa)', type: 'text' },
     { key: 'spend', label: 'Chi phí' },
     { key: 'impressions', label: 'Lượt hiển thị' },
     { key: 'reach', label: 'Tiếp cận' },
@@ -36,6 +38,7 @@ const METRICS_BY_PLATFORM = {
     { key: 'time', label: 'Thời gian (khung giờ)' },
   ],
   tiktok: [
+    { key: 'name', label: 'Tên (chứa/không chứa)', type: 'text' },
     { key: 'spend', label: 'Chi phí' },
     { key: 'impressions', label: 'Lượt hiển thị' },
     { key: 'clicks', label: 'Lượt nhấp' },
@@ -49,6 +52,15 @@ const METRICS_BY_PLATFORM = {
     { key: 'time', label: 'Thời gian (khung giờ)' },
   ],
 };
+
+const STRING_OPERATORS = [
+  { key: 'contains', label: 'chứa' },
+  { key: 'not_contains', label: 'không chứa' },
+  { key: 'starts_with', label: 'bắt đầu bằng' },
+  { key: 'ends_with', label: 'kết thúc bằng' },
+  { key: 'equals', label: 'bằng đúng' },
+  { key: 'not_equals', label: 'khác' },
+];
 
 const TIME_RANGES = [
   { key: 'today', label: 'Hôm nay' },
@@ -283,6 +295,14 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
                 <span className="bg-white px-2 py-1 rounded border border-slate-200">Thời gian</span>
                 <span className="bg-white px-2 py-1 rounded border border-slate-200">{c.timeStart} → {c.timeEnd}</span>
               </>
+            ) : c.metric === 'name' ? (
+              <>
+                <span className="bg-violet-50 text-violet-700 px-2 py-1 rounded border border-violet-200">Tên</span>
+                <span className="bg-white px-2 py-1 rounded border border-slate-200 text-slate-600">
+                  {STRING_OPERATORS.find(o => o.key === c.operator)?.label || c.operator}
+                </span>
+                <span className="bg-white px-2 py-1 rounded border border-slate-200 font-medium italic">"{c.value}"</span>
+              </>
             ) : (
               <>
                 <span className="bg-white px-2 py-1 rounded border border-slate-200">{getMetricLabel(c.metric)}</span>
@@ -466,7 +486,24 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                 <div key={idx} className="flex items-center gap-2 flex-wrap">
                   {idx > 0 && <span className="text-xs font-medium text-slate-500">{conditionsLogic}</span>}
 
-                  <select value={c.metric} onChange={(e) => updateCondition(idx, 'metric', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white min-w-[140px]">
+                  <select
+                    value={c.metric}
+                    onChange={(e) => {
+                      const newMetric = e.target.value;
+                      const newConds = [...conditions];
+                      if (newMetric === 'name') {
+                        newConds[idx] = { metric: 'name', operator: 'contains', value: '' };
+                      } else if (newMetric === 'time') {
+                        newConds[idx] = { metric: 'time', timeStart: '06:00', timeEnd: '22:00' };
+                      } else if (c.metric === 'name' || c.metric === 'time') {
+                        newConds[idx] = { metric: newMetric, operator: '>', value: 0, timeRange: 'today' };
+                      } else {
+                        newConds[idx] = { ...newConds[idx], metric: newMetric };
+                      }
+                      setConditions(newConds);
+                    }}
+                    className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white min-w-[160px]"
+                  >
                     {metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
                   </select>
 
@@ -486,6 +523,26 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                         onChange={(e) => updateCondition(idx, 'timeEnd', e.target.value)}
                         className="border border-slate-200 rounded-md px-2 py-1.5 text-xs"
                       />
+                    </>
+                  ) : c.metric === 'name' ? (
+                    <>
+                      <select
+                        value={c.operator || 'contains'}
+                        onChange={(e) => updateCondition(idx, 'operator', e.target.value)}
+                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white w-36"
+                      >
+                        {STRING_OPERATORS.map(o => (
+                          <option key={o.key} value={o.key}>{o.label}</option>
+                        ))}
+                      </select>
+                      <input
+                        type="text"
+                        value={c.value || ''}
+                        onChange={(e) => updateCondition(idx, 'value', e.target.value)}
+                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs flex-1 min-w-[140px]"
+                        placeholder='VD: "camp_abc", "test", "video"'
+                      />
+                      <span className="text-[10px] text-slate-400 whitespace-nowrap">(không phân biệt hoa thường)</span>
                     </>
                   ) : (
                     <>
