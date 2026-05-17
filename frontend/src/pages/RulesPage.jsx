@@ -87,7 +87,9 @@ export default function RulesPage() {
     try {
       const res = await dashboardApi.getAccounts(platform);
       setAccounts(res.data.accounts);
-    } catch (err) {}
+    } catch (err) {
+      setAccounts([]);
+    }
   };
 
   const loadRules = async () => {
@@ -119,10 +121,19 @@ export default function RulesPage() {
     const t = toast.loading('Đang chạy rule...');
     try {
       const res = await rulesApi.run(rule.id);
-      toast.success(`Rule đã chạy. Triggered: ${res.data.triggered || 0}`, { id: t });
+      const result = res.data;
+      if (!result.success) {
+        toast.error(result.message || 'Rule không thể chạy', { id: t });
+      } else if (result.triggered > 0) {
+        toast.success(`Rule đã trigger ${result.triggered} đối tượng`, { id: t });
+      } else {
+        toast(`Rule đã chạy. Không có đối tượng nào thỏa điều kiện (triggered: 0)`, {
+          id: t, icon: 'ℹ️',
+        });
+      }
       await loadRules();
     } catch (err) {
-      toast.error(err.message, { id: t });
+      toast.error(err.message || 'Lỗi khi chạy rule', { id: t });
     }
   };
 

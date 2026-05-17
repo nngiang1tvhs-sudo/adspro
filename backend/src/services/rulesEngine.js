@@ -68,7 +68,7 @@ const getMetricValue = async (object, metric, timeRange, account) => {
     ctr: 'ctr', cpc: 'cpc', cpm: 'cpm', conversions: 'conversions',
     cpa: 'cpa', revenue: 'revenue', roas: 'roas',
     video_views: 'video_views', cpv: 'cpv', engagements: 'engagements',
-    follows: 'follows', messages: 'messages',
+    follows: 'follows', messages: 'messages', reach: 'reach',
   };
 
   const column = colMap[metric];
@@ -281,11 +281,13 @@ const executeRule = async (rule) => {
         targets = r.rows.map(a => ({ ...a, type: 'ad' }));
       }
 
-      for (const target of targets) {
-        // Kiểm tra cooldown
-        if (rule.last_triggered_at) {
+      let lastTriggeredAt = rule.last_triggered_at;
+
+    for (const target of targets) {
+        // Kiểm tra cooldown (dùng biến local để phản ánh trigger trong cùng lần chạy)
+        if (lastTriggeredAt) {
           const cooldownMs = (rule.cooldown_minutes || 60) * 60 * 1000;
-          const sinceLastTrigger = Date.now() - new Date(rule.last_triggered_at).getTime();
+          const sinceLastTrigger = Date.now() - new Date(lastTriggeredAt).getTime();
           if (sinceLastTrigger < cooldownMs) {
             continue;
           }
@@ -331,7 +333,9 @@ const executeRule = async (rule) => {
           ]
         );
 
-        // Cập nhật last_triggered_at
+        // Cập nhật last_triggered_at (cả DB lẫn local để cooldown đúng trong cùng lần chạy)
+        const nowTs = new Date().toISOString();
+        lastTriggeredAt = nowTs;
         await query(
           'UPDATE rules SET last_triggered_at = CURRENT_TIMESTAMP, total_triggers = total_triggers + 1 WHERE id = $1',
           [rule.id]

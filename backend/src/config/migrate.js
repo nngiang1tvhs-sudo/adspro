@@ -131,6 +131,7 @@ CREATE TABLE IF NOT EXISTS daily_metrics (
   roas DECIMAL(8,4) DEFAULT 0,
   video_views INTEGER DEFAULT 0,
   cpv DECIMAL(15,2) DEFAULT 0,
+  reach INTEGER DEFAULT 0,
   engagements INTEGER DEFAULT 0,
   follows INTEGER DEFAULT 0,
   messages INTEGER DEFAULT 0,
@@ -271,6 +272,9 @@ ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS currency VARCHAR(10);
 
 -- Thêm cột group_name để nhóm tài khoản
 ALTER TABLE ad_accounts ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
+
+-- Thêm cột reach vào daily_metrics nếu chưa có
+ALTER TABLE daily_metrics ADD COLUMN IF NOT EXISTS reach INTEGER DEFAULT 0;
 
 -- Triggers
 DO $$
