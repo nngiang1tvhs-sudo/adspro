@@ -30,6 +30,7 @@ const getRecipientEmails = async (userId) => {
 
 /**
  * Gửi email cơ bản
+ * Gửi riêng từng recipient để tránh toàn bộ batch fail khi 1 địa chỉ bị lỗi.
  */
 const sendEmail = async ({ to, subject, html, userId = null }) => {
   const resend = getResendClient();
@@ -47,38 +48,50 @@ const sendEmail = async ({ to, subject, html, userId = null }) => {
     return { success: false, message: 'Email service chưa cấu hình' };
   }
 
-  try {
-    const recipients = Array.isArray(to) ? to : [to];
+  const recipients = Array.isArray(to) ? to : [to];
+  const fromAddress = process.env.EMAIL_FROM || 'AdsPro <onboarding@resend.dev>';
 
-    const result = await resend.emails.send({
-      from: process.env.EMAIL_FROM || 'AdsPro <onboarding@resend.dev>',
-      to: recipients,
-      subject,
-      html,
-    });
-
-    if (userId) {
-      await logEvent({
-        userId,
-        eventType: EVENT_TYPES.EMAIL_SENT,
-        level: 'success',
-        message: `Email đã gửi đến ${recipients.join(', ')}: ${subject}`,
+  const results = [];
+  for (const recipient of recipients) {
+    try {
+      const result = await resend.emails.send({
+        from: fromAddress,
+        to: [recipient],
+        subject,
+        html,
       });
+      results.push({ email: recipient, success: true, id: result.data?.id });
+    } catch (err) {
+      logger.error(`Send email error to ${recipient}:`, err.message);
+      results.push({ email: recipient, success: false, message: err.message });
     }
-
-    return { success: true, id: result.data?.id };
-  } catch (err) {
-    logger.error('Send email error:', err);
-    if (userId) {
-      await logEvent({
-        userId,
-        eventType: EVENT_TYPES.EMAIL_FAILED,
-        level: 'error',
-        message: `Lỗi gửi email: ${err.message}`,
-      });
-    }
-    return { success: false, message: err.message };
   }
+
+  const anySuccess = results.some(r => r.success);
+  const successList = results.filter(r => r.success).map(r => r.email);
+  const failList = results.filter(r => !r.success).map(r => r.email);
+
+  if (anySuccess && userId) {
+    await logEvent({
+      userId,
+      eventType: EVENT_TYPES.EMAIL_SENT,
+      level: failList.length > 0 ? 'warning' : 'success',
+      message: `Email đã gửi đến ${successList.join(', ')}: ${subject}${failList.length > 0 ? ` | Thất bại: ${failList.join(', ')}` : ''}`,
+    });
+  } else if (!anySuccess && userId) {
+    await logEvent({
+      userId,
+      eventType: EVENT_TYPES.EMAIL_FAILED,
+      level: 'error',
+      message: `Lỗi gửi email đến ${recipients.join(', ')}: ${results.map(r => r.message).join('; ')}`,
+    });
+  }
+
+  if (!anySuccess) {
+    return { success: false, message: results.map(r => r.message).join('; ') };
+  }
+
+  return { success: true, sent: successList, failed: failList, id: results.find(r => r.success)?.id };
 };
 
 /**
