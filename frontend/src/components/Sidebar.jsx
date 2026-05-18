@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Settings2, History, Link2, LogOut, RefreshCw } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Settings2, History, Link2, LogOut, RefreshCw, SlidersHorizontal } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { campaignsApi } from '../services/api';
@@ -11,6 +11,7 @@ const NAV_ITEMS = [
   { to: '/rules', icon: Settings2, label: 'Quản lý Rule' },
   { to: '/history', icon: History, label: 'Lịch sử' },
   { to: '/connect', icon: Link2, label: 'Kết nối tài khoản' },
+  { to: '/settings', icon: SlidersHorizontal, label: 'Cài đặt' },
 ];
 
 export default function Sidebar() {

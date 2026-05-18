@@ -54,6 +54,7 @@ router.get('/history/sync', authenticate, historyController.getSyncHistory);
 router.get('/settings', authenticate, settingsController.getSettings);
 router.put('/settings', authenticate, settingsController.updateSettings);
 router.post('/settings/test-email', authenticate, settingsController.testEmailSetting);
+router.post('/settings/send-report', authenticate, settingsController.sendReportNow);
 router.get('/settings/column-presets', authenticate, settingsController.getColumnPresets);
 router.post('/settings/column-presets', authenticate, settingsController.createColumnPreset);
 router.put('/settings/column-presets/:id', authenticate, settingsController.updateColumnPreset);

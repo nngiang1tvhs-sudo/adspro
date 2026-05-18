@@ -94,6 +94,7 @@ export const settingsApi = {
   get: () => api.get('/settings'),
   update: (data) => api.put('/settings', data),
   testEmail: (to) => api.post('/settings/test-email', { to }),
+  sendReport: () => api.post('/settings/send-report'),
   getColumnPresets: (platform) => api.get('/settings/column-presets', { params: { platform } }),
   createColumnPreset: (data) => api.post('/settings/column-presets', data),
   updateColumnPreset: (id, data) => api.put(`/settings/column-presets/${id}`, data),

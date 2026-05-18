@@ -1,6 +1,6 @@
 const { query } = require('../config/database');
 const { success, error, asyncHandler } = require('../utils/response');
-const { sendTestEmail } = require('../services/emailService');
+const { sendTestEmail, sendDailyReport } = require('../services/emailService');
 
 /**
  * GET /api/settings
@@ -79,6 +79,17 @@ const testEmailSetting = asyncHandler(async (req, res) => {
   }
 
   return success(res, result, 'Đã gửi email test');
+});
+
+/**
+ * POST /api/settings/send-report
+ */
+const sendReportNow = asyncHandler(async (req, res) => {
+  const result = await sendDailyReport(req.user.id);
+  if (!result.success) {
+    return error(res, result.message || 'Gửi báo cáo thất bại', 500);
+  }
+  return success(res, result, 'Đã gửi báo cáo thành công');
 });
 
 /**
@@ -174,6 +185,7 @@ module.exports = {
   getSettings,
   updateSettings,
   testEmailSetting,
+  sendReportNow,
   getColumnPresets,
   createColumnPreset,
   updateColumnPreset,

@@ -7,6 +7,7 @@ import CampaignsPage from './pages/CampaignsPage';
 import RulesPage from './pages/RulesPage';
 import HistoryPage from './pages/HistoryPage';
 import ConnectPage from './pages/ConnectPage';
+import SettingsPage from './pages/SettingsPage';
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="rules" element={<RulesPage />} />
         <Route path="history" element={<HistoryPage />} />
         <Route path="connect" element={<ConnectPage />} />
+        <Route path="settings" element={<SettingsPage />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
