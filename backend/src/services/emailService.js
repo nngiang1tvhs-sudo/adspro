@@ -101,74 +101,138 @@ const buildDailyReportHtml = (data) => {
   const { date, platforms } = data;
 
   const platformLabels = { google: 'Google Ads', facebook: 'Facebook Ads', tiktok: 'TikTok Ads' };
-  const platformColors = { google: '#4285F4', facebook: '#1877F2', tiktok: '#010101' };
+  const platformColors = { google: '#4285F4', facebook: '#1877F2', tiktok: '#FE2C55' };
+  const platformIcons  = { google: '🔵', facebook: '🔷', tiktok: '🔴' };
 
-  let platformsHtml = '';
   let totalSpendAll = 0;
+  let totalCampaigns = 0;
+  const platformEntries = Object.entries(platforms);
 
-  for (const [platformKey, info] of Object.entries(platforms)) {
+  for (const [, info] of platformEntries) {
+    totalSpendAll += info.totalSpend || 0;
+    totalCampaigns += info.activeCampaigns || 0;
+  }
+
+  // Xây platform cards
+  let platformsHtml = '';
+  for (const [platformKey, info] of platformEntries) {
     const color = platformColors[platformKey];
     const label = platformLabels[platformKey];
-    totalSpendAll += info.totalSpend || 0;
+    const icon  = platformIcons[platformKey];
+    const spend = info.totalSpend || 0;
+    const pct   = totalSpendAll > 0 ? Math.round((spend / totalSpendAll) * 100) : 0;
 
+    // Metrics row
+    const metrics = [
+      { label: 'Chi tiêu', value: `₫${formatCurrency(spend)}`, bold: true },
+      ...(info.clicks > 0    ? [{ label: 'Clicks',     value: formatNumber(info.clicks) }] : []),
+      ...(info.impressions > 0 ? [{ label: 'Impressions', value: formatNumber(info.impressions) }] : []),
+      ...(info.cpc > 0       ? [{ label: 'CPC',        value: `₫${formatCurrency(info.cpc)}` }] : []),
+      ...(info.ctr > 0       ? [{ label: 'CTR',        value: `${(info.ctr).toFixed(2)}%` }] : []),
+    ];
+
+    const metricCols = metrics.map(m => `
+      <td style="padding:10px 12px;text-align:center;border-right:1px solid #F1F5F9;">
+        <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${m.label}</div>
+        <div style="font-size:15px;font-weight:${m.bold ? '700' : '600'};color:${m.bold ? color : '#1E293B'};">${m.value}</div>
+      </td>`).join('');
+
+    // Alerts
+    const hasAlerts = info.alerts && info.alerts.length > 0;
     let alertsHtml = '';
-    if (info.alerts && info.alerts.length > 0) {
+    if (hasAlerts) {
       alertsHtml = info.alerts.map(a => {
-        const icon = a.type === 'error' ? '🔴' : a.type === 'warning' ? '⚠️' : 'ℹ️';
-        const bgColor = a.type === 'error' ? '#FEE2E2' : a.type === 'warning' ? '#FEF3C7' : '#DBEAFE';
-        const textColor = a.type === 'error' ? '#991B1B' : a.type === 'warning' ? '#92400E' : '#1E40AF';
-        return `<div style="background:${bgColor};color:${textColor};padding:8px 12px;border-radius:6px;margin-bottom:6px;font-size:13px;">${icon} ${a.message}</div>`;
+        const bg   = a.type === 'error' ? '#FEF2F2' : a.type === 'warning' ? '#FFFBEB' : '#EFF6FF';
+        const tc   = a.type === 'error' ? '#B91C1C' : a.type === 'warning' ? '#B45309' : '#1D4ED8';
+        const ico  = a.type === 'error' ? '🔴' : a.type === 'warning' ? '⚠️' : 'ℹ️';
+        return `<div style="background:${bg};color:${tc};padding:7px 10px;border-radius:6px;font-size:12px;margin-bottom:5px;">${ico} ${a.message}</div>`;
       }).join('');
     } else {
-      alertsHtml = `<div style="color:#16A34A;font-size:13px;padding:6px 0;">✅ Hoạt động bình thường</div>`;
+      alertsHtml = `<div style="color:#16A34A;font-size:12px;">✅ Hoạt động bình thường</div>`;
     }
 
     platformsHtml += `
-      <div style="margin-bottom:24px;padding:16px;background:#FFFFFF;border-radius:10px;border-left:4px solid ${color};">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-          <div style="font-size:16px;font-weight:600;color:#1E293B;">${label}</div>
-          <div style="font-size:13px;color:#64748B;">${info.activeCampaigns || 0} chiến dịch đang chạy</div>
+    <div style="background:#FFFFFF;border-radius:12px;margin-bottom:14px;overflow:hidden;border:1px solid #E2E8F0;">
+      <!-- Platform header -->
+      <div style="background:${color}12;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid ${color}22;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:4px;height:20px;background:${color};border-radius:2px;display:inline-block;vertical-align:middle;"></div>
+          <span style="font-size:15px;font-weight:700;color:#1E293B;vertical-align:middle;">${label}</span>
         </div>
-        <div style="font-size:13px;color:#64748B;margin-bottom:10px;">Chi tiêu: <strong style="color:#1E293B;">${formatCurrency(info.totalSpend || 0)}</strong></div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:12px;color:#64748B;">${info.activeCampaigns || 0} chiến dịch</span>
+          <span style="font-size:12px;font-weight:600;color:#FFFFFF;background:${color};padding:2px 8px;border-radius:20px;">${pct}%</span>
+        </div>
+      </div>
+      <!-- Metrics -->
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>${metricCols}</tr>
+      </table>
+      <!-- Alerts -->
+      <div style="padding:10px 14px;background:#FAFAFA;border-top:1px solid #F1F5F9;">
         ${alertsHtml}
       </div>
-    `;
+    </div>`;
   }
 
-  return `
-<!DOCTYPE html>
+  // Tóm tắt alerts toàn hệ thống
+  const allAlerts = platformEntries.flatMap(([, info]) => info.alerts || []);
+  const warnCount = allAlerts.filter(a => a.type === 'warning' || a.type === 'error').length;
+  const statusBadge = warnCount > 0
+    ? `<span style="background:#FEF3C7;color:#92400E;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">⚠️ ${warnCount} cảnh báo</span>`
+    : `<span style="background:#DCFCE7;color:#15803D;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">✅ Tất cả ổn định</span>`;
+
+  return `<!DOCTYPE html>
 <html>
-<head>
-  <meta charset="UTF-8">
-  <title>Báo cáo sáng AdsPro</title>
-</head>
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
-  <div style="max-width:600px;margin:0 auto;padding:24px;">
-    <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#FFFFFF;padding:24px;border-radius:12px 12px 0 0;">
-      <h1 style="margin:0;font-size:22px;">AdsPro — Báo cáo sáng</h1>
-      <div style="font-size:14px;opacity:0.9;margin-top:4px;">Ngày ${dayjs(date).format('DD/MM/YYYY')}</div>
-    </div>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Báo cáo AdsPro</title></head>
+<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<div style="max-width:600px;margin:0 auto;padding:20px 16px;">
 
-    <div style="background:#FFFFFF;padding:20px;">
-      <div style="background:#EFF6FF;padding:16px;border-radius:8px;margin-bottom:20px;text-align:center;">
-        <div style="font-size:13px;color:#64748B;margin-bottom:4px;">Tổng chi tiêu hôm qua</div>
-        <div style="font-size:24px;font-weight:600;color:#2563EB;">${formatCurrency(totalSpendAll)}</div>
+  <!-- Header -->
+  <div style="background:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);color:#FFFFFF;padding:20px 24px;border-radius:14px 14px 0 0;">
+    <div style="display:flex;align-items:center;justify-content:space-between;">
+      <div>
+        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">AdsPro</div>
+        <div style="font-size:20px;font-weight:700;">Báo cáo hàng ngày</div>
       </div>
-
-      ${platformsHtml}
-    </div>
-
-    <div style="background:#F8FAFC;padding:16px;border-radius:0 0 12px 12px;text-align:center;font-size:12px;color:#94A3B8;">
-      Email tự động từ AdsPro · ${dayjs().format('HH:mm DD/MM/YYYY')}
+      <div style="text-align:right;">
+        <div style="font-size:11px;opacity:0.75;">Ngày</div>
+        <div style="font-size:16px;font-weight:600;">${dayjs(date).format('DD/MM/YYYY')}</div>
+      </div>
     </div>
   </div>
+
+  <!-- Summary -->
+  <div style="background:#FFFFFF;padding:20px 24px;border-bottom:1px solid #E2E8F0;">
+    <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+      <div>
+        <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Tổng chi tiêu hôm qua</div>
+        <div style="font-size:32px;font-weight:800;color:#4F46E5;line-height:1;">₫${formatCurrency(totalSpendAll)}</div>
+        <div style="font-size:12px;color:#64748B;margin-top:6px;">${platformEntries.length} nền tảng &nbsp;·&nbsp; ${totalCampaigns} chiến dịch đang chạy</div>
+      </div>
+      <div style="text-align:right;">
+        ${statusBadge}
+      </div>
+    </div>
+  </div>
+
+  <!-- Platform cards -->
+  <div style="padding:16px 0;">
+    ${platformsHtml}
+  </div>
+
+  <!-- Footer -->
+  <div style="text-align:center;padding:12px;font-size:11px;color:#94A3B8;">
+    Gửi lúc ${dayjs().format('HH:mm')} &nbsp;·&nbsp; AdsPro Tự động &nbsp;·&nbsp; ${dayjs().format('DD/MM/YYYY')}
+  </div>
+
+</div>
 </body>
 </html>`;
 };
 
-const formatCurrency = (n) => {
-  return new Intl.NumberFormat('vi-VN').format(Math.round(n));
-};
+const formatCurrency = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
+const formatNumber  = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 
 /**
  * Gửi báo cáo sáng cho 1 user
@@ -195,9 +259,15 @@ const sendDailyReport = async (userId) => {
 
       const accountIds = accounts.rows.map(a => a.id);
 
-      // Tổng chi tiêu hôm qua
-      const spendResult = await query(
-        `SELECT COALESCE(SUM(spend), 0) as total FROM daily_metrics
+      // Metrics hôm qua
+      const metricsResult = await query(
+        `SELECT
+           COALESCE(SUM(spend), 0)       as total_spend,
+           COALESCE(SUM(clicks), 0)      as total_clicks,
+           COALESCE(SUM(impressions), 0) as total_impressions,
+           COALESCE(AVG(NULLIF(cpc,0)), 0) as avg_cpc,
+           COALESCE(AVG(NULLIF(ctr,0)), 0) as avg_ctr
+         FROM daily_metrics
          WHERE account_id = ANY($1) AND date = $2`,
         [accountIds, yesterday]
       );
@@ -240,8 +310,13 @@ const sendDailyReport = async (userId) => {
         });
       });
 
+      const m = metricsResult.rows[0];
       platforms[platform] = {
-        totalSpend: Number(spendResult.rows[0].total),
+        totalSpend:      Number(m.total_spend),
+        clicks:          Number(m.total_clicks),
+        impressions:     Number(m.total_impressions),
+        cpc:             Number(m.avg_cpc),
+        ctr:             Number(m.avg_ctr),
         activeCampaigns: Number(activeResult.rows[0].count),
         alerts,
       };
