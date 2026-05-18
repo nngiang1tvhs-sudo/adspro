@@ -95,162 +95,180 @@ const sendEmail = async ({ to, subject, html, userId = null }) => {
 };
 
 /**
- * Tạo HTML báo cáo sáng
+ * Tạo HTML báo cáo sáng - theo mockup
  */
 const buildDailyReportHtml = (data) => {
   const { date, platforms } = data;
 
-  const platformLabels = { google: 'Google Ads', facebook: 'Facebook Ads', tiktok: 'TikTok Ads' };
-  const platformColors = { google: '#4285F4', facebook: '#1877F2', tiktok: '#FE2C55' };
-  const platformIcons  = { google: '🔵', facebook: '🔷', tiktok: '🔴' };
+  const PLATFORM_CFG = {
+    google: {
+      label: 'Google Ads',
+      iconBg: '#34A853', iconText: '▲',
+      badgeBg: '#EBF4FF', badgeColor: '#3B82F6',
+      columns: [
+        { key: 'spend',       label: 'CHI TIÊU',  fmt: 'currency', color: null },
+        { key: 'impressions', label: 'TRUEVIEW',   fmt: 'number',   color: null },
+      ],
+    },
+    tiktok: {
+      label: 'TikTok Ads',
+      iconBg: '#010101', iconText: '♪',
+      badgeBg: '#FFF0F3', badgeColor: '#F43F5E',
+      columns: [
+        { key: 'spend',       label: 'CHI TIÊU', fmt: 'currency', color: null },
+        { key: 'video_views', label: 'VIEWS',    fmt: 'number',   color: null },
+        { key: 'follows',     label: 'FOLLOWS',  fmt: 'number',   color: '#F43F5E' },
+      ],
+    },
+    facebook: {
+      label: 'Facebook Ads',
+      iconBg: '#1877F2', iconText: 'f',
+      badgeBg: '#EBF4FF', badgeColor: '#3B82F6',
+      columns: [
+        { key: 'spend',       label: 'CHI TIÊU',  fmt: 'currency', color: null },
+        { key: 'follows',     label: 'FOLLOW',     fmt: 'number',   color: '#3B82F6' },
+        { key: 'video_views', label: 'VIEW 2S',    fmt: 'number',   color: null },
+        { key: 'engagements', label: 'TƯƠNG TÁC',  fmt: 'number',   color: null },
+      ],
+    },
+  };
 
   let totalSpendAll = 0;
   let totalCampaigns = 0;
   const platformEntries = Object.entries(platforms);
-
   for (const [, info] of platformEntries) {
     totalSpendAll += info.totalSpend || 0;
     totalCampaigns += info.activeCampaigns || 0;
   }
 
-  // Xây platform cards
   let platformsHtml = '';
-  for (const [platformKey, info] of platformEntries) {
-    const color = platformColors[platformKey];
-    const label = platformLabels[platformKey];
-    const icon  = platformIcons[platformKey];
-    const spend = info.totalSpend || 0;
-    const pct   = totalSpendAll > 0 ? Math.round((spend / totalSpendAll) * 100) : 0;
+  for (const [key, info] of platformEntries) {
+    const cfg = PLATFORM_CFG[key];
+    if (!cfg) continue;
 
-    // Metrics row
-    const metrics = [
-      { label: 'Chi tiêu', value: `₫${formatCurrency(spend)}`, bold: true },
-      ...(info.clicks > 0    ? [{ label: 'Clicks',     value: formatNumber(info.clicks) }] : []),
-      ...(info.impressions > 0 ? [{ label: 'Impressions', value: formatNumber(info.impressions) }] : []),
-      ...(info.cpc > 0       ? [{ label: 'CPC',        value: `₫${formatCurrency(info.cpc)}` }] : []),
-      ...(info.ctr > 0       ? [{ label: 'CTR',        value: `${(info.ctr).toFixed(2)}%` }] : []),
-    ];
+    // Header columns
+    const thCells = cfg.columns.map(c =>
+      `<td style="padding:9px 12px;text-align:right;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.8px;white-space:nowrap;">${c.label}</td>`
+    ).join('');
 
-    const metricCols = metrics.map(m => `
-      <td style="padding:10px 12px;text-align:center;border-right:1px solid #F1F5F9;">
-        <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${m.label}</div>
-        <div style="font-size:15px;font-weight:${m.bold ? '700' : '600'};color:${m.bold ? color : '#1E293B'};">${m.value}</div>
-      </td>`).join('');
-
-    // Alerts
-    const hasAlerts = info.alerts && info.alerts.length > 0;
-    let alertsHtml = '';
-    if (hasAlerts) {
-      alertsHtml = info.alerts.map(a => {
-        const bg   = a.type === 'error' ? '#FEF2F2' : a.type === 'warning' ? '#FFFBEB' : '#EFF6FF';
-        const tc   = a.type === 'error' ? '#B91C1C' : a.type === 'warning' ? '#B45309' : '#1D4ED8';
-        const ico  = a.type === 'error' ? '🔴' : a.type === 'warning' ? '⚠️' : 'ℹ️';
-        return `<div style="background:${bg};color:${tc};padding:7px 10px;border-radius:6px;font-size:12px;margin-bottom:5px;">${ico} ${a.message}</div>`;
+    // Campaign rows
+    const rows = (info.topCampaigns || []).map((camp, i) => {
+      const bg = i % 2 === 0 ? '#FFFFFF' : '#FAFBFC';
+      const tds = cfg.columns.map(c => {
+        const val = camp[c.key] || 0;
+        const txt = c.fmt === 'currency' ? formatShort(val) : formatNumber(val);
+        const color = c.color || (c.fmt === 'currency' ? '#1E293B' : '#374151');
+        const fw = c.fmt === 'currency' ? '600' : '400';
+        return `<td style="padding:10px 12px;text-align:right;font-size:13px;color:${color};font-weight:${fw};white-space:nowrap;">${txt}</td>`;
       }).join('');
-    } else {
-      alertsHtml = `<div style="color:#16A34A;font-size:12px;">✅ Hoạt động bình thường</div>`;
-    }
+      return `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
+        <td style="padding:10px 12px;font-size:13px;color:#1E293B;">${camp.name}</td>${tds}
+      </tr>`;
+    }).join('');
+
+    const emptyRow = info.topCampaigns?.length === 0
+      ? `<tr><td colspan="${cfg.columns.length + 1}" style="padding:20px;text-align:center;color:#94A3B8;font-size:13px;">Không có dữ liệu cho ngày hôm qua</td></tr>`
+      : '';
 
     platformsHtml += `
-    <div style="background:#FFFFFF;border-radius:12px;margin-bottom:14px;overflow:hidden;border:1px solid #E2E8F0;">
-      <!-- Platform header -->
-      <div style="background:${color}12;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid ${color}22;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:4px;height:20px;background:${color};border-radius:2px;display:inline-block;vertical-align:middle;"></div>
-          <span style="font-size:15px;font-weight:700;color:#1E293B;vertical-align:middle;">${label}</span>
-        </div>
+    <div style="margin-bottom:28px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
         <div style="display:flex;align-items:center;gap:10px;">
-          <span style="font-size:12px;color:#64748B;">${info.activeCampaigns || 0} chiến dịch</span>
-          <span style="font-size:12px;font-weight:600;color:#FFFFFF;background:${color};padding:2px 8px;border-radius:20px;">${pct}%</span>
+          <div style="width:36px;height:36px;border-radius:10px;background:${cfg.iconBg};text-align:center;line-height:36px;color:#FFF;font-weight:700;font-size:16px;flex-shrink:0;">${cfg.iconText}</div>
+          <div>
+            <div style="font-weight:700;color:#1E293B;font-size:15px;">${cfg.label}</div>
+            <div style="color:#94A3B8;font-size:12px;margin-top:1px;">${info.activeCampaigns || 0} chiến dịch đang chạy</div>
+          </div>
         </div>
+        <div style="background:${cfg.badgeBg};color:${cfg.badgeColor};font-size:15px;font-weight:700;padding:6px 14px;border-radius:8px;white-space:nowrap;">${formatShort(info.totalSpend || 0)}</div>
       </div>
-      <!-- Metrics -->
-      <table style="width:100%;border-collapse:collapse;">
-        <tr>${metricCols}</tr>
-      </table>
-      <!-- Alerts -->
-      <div style="padding:10px 14px;background:#FAFAFA;border-top:1px solid #F1F5F9;">
-        ${alertsHtml}
+      <div style="border:1px solid #E8ECF0;border-radius:10px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <tr style="background:#F8F9FB;border-bottom:1px solid #E8ECF0;">
+            <td style="padding:9px 12px;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.8px;">CHIẾN DỊCH</td>
+            ${thCells}
+          </tr>
+          ${rows}${emptyRow}
+        </table>
       </div>
     </div>`;
   }
 
-  // Tóm tắt alerts toàn hệ thống
-  const allAlerts = platformEntries.flatMap(([, info]) => info.alerts || []);
-  const warnCount = allAlerts.filter(a => a.type === 'warning' || a.type === 'error').length;
-  const statusBadge = warnCount > 0
-    ? `<span style="background:#FEF3C7;color:#92400E;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">⚠️ ${warnCount} cảnh báo</span>`
-    : `<span style="background:#DCFCE7;color:#15803D;padding:4px 10px;border-radius:20px;font-size:12px;font-weight:600;">✅ Tất cả ổn định</span>`;
-
   return `<!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Báo cáo AdsPro</title></head>
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<div style="max-width:600px;margin:0 auto;padding:20px 16px;">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Báo cáo Ads hàng ngày</title></head>
+<body style="margin:0;padding:0;background:#F2F4F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<div style="max-width:620px;margin:0 auto;padding:20px 16px;">
+<div style="border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
 
-  <!-- Header -->
-  <div style="background:linear-gradient(135deg,#4F46E5 0%,#7C3AED 100%);color:#FFFFFF;padding:20px 24px;border-radius:14px 14px 0 0;">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
+  <!-- Dark header -->
+  <div style="background:#1C2537;padding:24px;">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
       <div>
-        <div style="font-size:11px;opacity:0.75;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">AdsPro</div>
-        <div style="font-size:20px;font-weight:700;">Báo cáo hàng ngày</div>
+        <div style="color:#9CA3AF;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">DAILY REPORT</div>
+        <div style="color:#FFFFFF;font-size:22px;font-weight:700;">Báo cáo Ads hàng ngày</div>
       </div>
-      <div style="text-align:right;">
-        <div style="font-size:11px;opacity:0.75;">Ngày</div>
-        <div style="font-size:16px;font-weight:600;">${dayjs(date).format('DD/MM/YYYY')}</div>
+      <div style="background:#252F45;border-radius:10px;padding:10px 16px;text-align:center;min-width:90px;">
+        <div style="color:#9CA3AF;font-size:10px;margin-bottom:4px;">Ngày</div>
+        <div style="color:#FFFFFF;font-size:15px;font-weight:700;">${dayjs(date).format('DD/MM/YYYY')}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;">
+      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
+        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">TỔNG CHI TIÊU</div>
+        <div style="color:#4DD9C0;font-size:22px;font-weight:700;">${formatShort(totalSpendAll)}</div>
+      </div>
+      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
+        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">CHIẾN DỊCH</div>
+        <div><span style="color:#FFFFFF;font-size:22px;font-weight:700;">${totalCampaigns}</span><span style="color:#9CA3AF;font-size:12px;margin-left:6px;">đang chạy</span></div>
+      </div>
+      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
+        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">NỀN TẢNG</div>
+        <div><span style="color:#FFFFFF;font-size:22px;font-weight:700;">${platformEntries.length}</span><span style="color:#9CA3AF;font-size:12px;margin-left:6px;">kênh</span></div>
       </div>
     </div>
   </div>
 
-  <!-- Summary -->
-  <div style="background:#FFFFFF;padding:20px 24px;border-bottom:1px solid #E2E8F0;">
-    <div style="display:flex;align-items:flex-end;justify-content:space-between;flex-wrap:wrap;gap:12px;">
-      <div>
-        <div style="font-size:11px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px;">Tổng chi tiêu hôm qua</div>
-        <div style="font-size:32px;font-weight:800;color:#4F46E5;line-height:1;">₫${formatCurrency(totalSpendAll)}</div>
-        <div style="font-size:12px;color:#64748B;margin-top:6px;">${platformEntries.length} nền tảng &nbsp;·&nbsp; ${totalCampaigns} chiến dịch đang chạy</div>
-      </div>
-      <div style="text-align:right;">
-        ${statusBadge}
-      </div>
-    </div>
-  </div>
-
-  <!-- Platform cards -->
-  <div style="padding:16px 0;">
+  <!-- Content -->
+  <div style="background:#FFFFFF;padding:24px;">
     ${platformsHtml}
   </div>
 
   <!-- Footer -->
-  <div style="text-align:center;padding:12px;font-size:11px;color:#94A3B8;">
-    Gửi lúc ${dayjs().format('HH:mm')} &nbsp;·&nbsp; AdsPro Tự động &nbsp;·&nbsp; ${dayjs().format('DD/MM/YYYY')}
+  <div style="background:#F8FAFC;padding:16px;text-align:center;border-top:1px solid #E8ECF0;">
+    <div style="color:#94A3B8;font-size:12px;">Báo cáo tự động · Dữ liệu cập nhật lúc 07:00 AM</div>
+    <div style="color:#94A3B8;font-size:12px;margin-top:4px;">— Ads Team —</div>
   </div>
 
+</div>
 </div>
 </body>
 </html>`;
 };
 
+const formatShort = (n) => {
+  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+  if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
+  return String(Math.round(n));
+};
 const formatCurrency = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
-const formatNumber  = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
+const formatNumber   = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 
 /**
  * Gửi báo cáo sáng cho 1 user
  */
 const sendDailyReport = async (userId) => {
   try {
-    // Lấy emails
     const emails = await getRecipientEmails(userId);
     if (emails.length === 0) {
       logger.warn(`User ${userId} chưa cài đặt email`);
       return { success: false, message: 'Chưa cài đặt email' };
     }
 
-    // Lấy data tổng hợp cho từng platform
     const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
     const platforms = {};
 
-    for (const platform of ['google', 'facebook', 'tiktok']) {
+    for (const platform of ['google', 'tiktok', 'facebook']) {
       const accounts = await query(
         `SELECT id FROM ad_accounts WHERE user_id = $1 AND platform = $2`,
         [userId, platform]
@@ -259,66 +277,48 @@ const sendDailyReport = async (userId) => {
 
       const accountIds = accounts.rows.map(a => a.id);
 
-      // Metrics hôm qua
-      const metricsResult = await query(
-        `SELECT
-           COALESCE(SUM(spend), 0)       as total_spend,
-           COALESCE(SUM(clicks), 0)      as total_clicks,
-           COALESCE(SUM(impressions), 0) as total_impressions,
-           COALESCE(AVG(NULLIF(cpc,0)), 0) as avg_cpc,
-           COALESCE(AVG(NULLIF(ctr,0)), 0) as avg_ctr
+      // Tổng metrics hôm qua
+      const totalsResult = await query(
+        `SELECT COALESCE(SUM(spend), 0) as total_spend
          FROM daily_metrics
          WHERE account_id = ANY($1) AND date = $2`,
         [accountIds, yesterday]
       );
 
-      // Số camp đang active
+      // Số chiến dịch đang active
       const activeResult = await query(
         `SELECT COUNT(*) as count FROM campaigns
          WHERE account_id = ANY($1) AND status IN ('ENABLED', 'ACTIVE', 'ENABLE')`,
         [accountIds]
       );
 
-      // Alerts: rules đã chạy hôm qua
-      const alertsResult = await query(
-        `SELECT rh.target_name, rh.status, rh.message, r.name as rule_name
-         FROM rule_history rh
-         JOIN rules r ON rh.rule_id = r.id
-         WHERE r.user_id = $1 AND r.platform = $2
-           AND rh.executed_at >= CURRENT_DATE - INTERVAL '1 day'
-         ORDER BY rh.executed_at DESC LIMIT 10`,
-        [userId, platform]
+      // Top 5 chiến dịch chi tiêu nhiều nhất hôm qua
+      const campaignsResult = await query(
+        `SELECT c.name,
+                COALESCE(dm.spend, 0)         AS spend,
+                COALESCE(dm.impressions, 0)   AS impressions,
+                COALESCE(dm.video_views, 0)   AS video_views,
+                COALESCE(dm.follows, 0)       AS follows,
+                COALESCE(dm.engagements, 0)   AS engagements
+         FROM campaigns c
+         INNER JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date = $2
+         WHERE c.account_id = ANY($1) AND dm.spend > 0
+         ORDER BY dm.spend DESC
+         LIMIT 5`,
+        [accountIds, yesterday]
       );
 
-      const alerts = alertsResult.rows.map(a => ({
-        type: a.status === 'success' ? 'info' : 'warning',
-        message: `${a.target_name}: ${a.message || a.rule_name}`,
-      }));
-
-      // Token expiring
-      const expiringResult = await query(
-        `SELECT account_name, token_expires_at FROM ad_accounts
-         WHERE user_id = $1 AND platform = $2
-           AND token_expires_at IS NOT NULL
-           AND token_expires_at < CURRENT_TIMESTAMP + INTERVAL '7 days'`,
-        [userId, platform]
-      );
-      expiringResult.rows.forEach(a => {
-        alerts.push({
-          type: 'warning',
-          message: `Token ${a.account_name} sắp hết hạn`,
-        });
-      });
-
-      const m = metricsResult.rows[0];
       platforms[platform] = {
-        totalSpend:      Number(m.total_spend),
-        clicks:          Number(m.total_clicks),
-        impressions:     Number(m.total_impressions),
-        cpc:             Number(m.avg_cpc),
-        ctr:             Number(m.avg_ctr),
+        totalSpend:      Number(totalsResult.rows[0].total_spend),
         activeCampaigns: Number(activeResult.rows[0].count),
-        alerts,
+        topCampaigns:    campaignsResult.rows.map(r => ({
+          name:        r.name,
+          spend:       Number(r.spend),
+          impressions: Number(r.impressions),
+          video_views: Number(r.video_views),
+          follows:     Number(r.follows),
+          engagements: Number(r.engagements),
+        })),
       };
     }
 
@@ -327,11 +327,11 @@ const sendDailyReport = async (userId) => {
       return { success: false, message: 'Chưa có tài khoản nào' };
     }
 
-    const html = buildDailyReportHtml({ date: dayjs().format('YYYY-MM-DD'), platforms });
+    const html = buildDailyReportHtml({ date: yesterday, platforms });
 
     return await sendEmail({
       to: emails,
-      subject: `AdsPro — Báo cáo sáng ${dayjs().format('DD/MM/YYYY')}`,
+      subject: `AdsPro — Báo cáo ngày ${dayjs(yesterday).format('DD/MM/YYYY')}`,
       html,
       userId,
     });
