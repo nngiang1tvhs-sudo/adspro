@@ -108,6 +108,7 @@ const buildDailyReportHtml = (data) => {
       columns: [
         { key: 'spend',       label: 'CHI TIÊU',  fmt: 'currency', color: null },
         { key: 'impressions', label: 'TRUEVIEW',   fmt: 'number',   color: null },
+        { key: 'conversions', label: 'KẾT QUẢ',   fmt: 'number',   color: null },
       ],
     },
     tiktok: {
@@ -118,6 +119,7 @@ const buildDailyReportHtml = (data) => {
         { key: 'spend',       label: 'CHI TIÊU', fmt: 'currency', color: null },
         { key: 'video_views', label: 'VIEWS',    fmt: 'number',   color: null },
         { key: 'follows',     label: 'FOLLOWS',  fmt: 'number',   color: '#F43F5E' },
+        { key: 'conversions', label: 'KẾT QUẢ', fmt: 'number',   color: null },
       ],
     },
     facebook: {
@@ -129,6 +131,7 @@ const buildDailyReportHtml = (data) => {
         { key: 'follows',     label: 'FOLLOW',     fmt: 'number',   color: '#3B82F6' },
         { key: 'video_views', label: 'VIEW 2S',    fmt: 'number',   color: null },
         { key: 'engagements', label: 'TƯƠNG TÁC',  fmt: 'number',   color: null },
+        { key: 'conversions', label: 'KẾT QUẢ',   fmt: 'number',   color: null },
       ],
     },
   };
@@ -246,11 +249,7 @@ const buildDailyReportHtml = (data) => {
 </html>`;
 };
 
-const formatShort = (n) => {
-  if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
-  if (n >= 1000) return (n / 1000).toFixed(0) + 'K';
-  return String(Math.round(n));
-};
+const formatShort = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const formatCurrency = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const formatNumber   = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 
@@ -299,7 +298,8 @@ const sendDailyReport = async (userId) => {
                 COALESCE(dm.impressions, 0)   AS impressions,
                 COALESCE(dm.video_views, 0)   AS video_views,
                 COALESCE(dm.follows, 0)       AS follows,
-                COALESCE(dm.engagements, 0)   AS engagements
+                COALESCE(dm.engagements, 0)   AS engagements,
+                COALESCE(dm.conversions, 0)   AS conversions
          FROM campaigns c
          INNER JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date = $2
          WHERE c.account_id = ANY($1) AND dm.spend > 0
@@ -318,6 +318,7 @@ const sendDailyReport = async (userId) => {
           video_views: Number(r.video_views),
           follows:     Number(r.follows),
           engagements: Number(r.engagements),
+          conversions: Number(r.conversions),
         })),
       };
     }
