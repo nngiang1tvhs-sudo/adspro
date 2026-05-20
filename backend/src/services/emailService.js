@@ -342,12 +342,49 @@ const sendDailyReport = async (userId) => {
   }
 };
 
+const METRIC_CFG = {
+  spend:       { label: 'Chi tiêu',    unit: '₫', fmt: 'currency' },
+  impressions: { label: 'Impressions', unit: '',   fmt: 'number'   },
+  clicks:      { label: 'Clicks',      unit: '',   fmt: 'number'   },
+  ctr:         { label: 'CTR',         unit: '%',  fmt: 'decimal'  },
+  cpc:         { label: 'CPC',         unit: '₫',  fmt: 'currency' },
+  cpm:         { label: 'CPM',         unit: '₫',  fmt: 'currency' },
+  conversions: { label: 'Conversions', unit: '',   fmt: 'number'   },
+  cpa:         { label: 'CPA',         unit: '₫',  fmt: 'currency' },
+  revenue:     { label: 'Doanh thu',   unit: '₫',  fmt: 'currency' },
+  roas:        { label: 'ROAS',        unit: 'x',  fmt: 'decimal'  },
+  video_views: { label: 'Views',       unit: '',   fmt: 'number'   },
+  cpv:         { label: 'CPV',         unit: '₫',  fmt: 'currency' },
+  engagements: { label: 'Tương tác',   unit: '',   fmt: 'number'   },
+  follows:     { label: 'Follows',     unit: '',   fmt: 'number'   },
+  messages:    { label: 'Messages',    unit: '',   fmt: 'number'   },
+  reach:       { label: 'Reach',       unit: '',   fmt: 'number'   },
+};
+
+const ACTION_CFG = {
+  pause:          { label: 'Đã tắt',         icon: '⏸', color: '#EA580C' },
+  enable:         { label: 'Đã bật',          icon: '▶',  color: '#16A34A' },
+  notify:         { label: 'Thông báo',       icon: '🔔', color: '#2563EB' },
+  warn_complete:  { label: 'Sắp hoàn thành', icon: '⚠️', color: '#D97706' },
+  warn_threshold: { label: 'Vượt ngưỡng',    icon: '⚠️', color: '#D97706' },
+};
+
+const TYPE_LABELS = { campaign: 'Chiến dịch', ad_group: 'Nhóm quảng cáo', ad: 'Quảng cáo' };
+const PLATFORM_LABELS_MAP = { google: 'Google Ads', facebook: 'Facebook Ads', tiktok: 'TikTok Ads' };
+const OP_LABELS = { '>': '>', '<': '<', '>=': '≥', '<=': '≤', '=': '=', '!=': '≠' };
+
+const fmtMetricVal = (val, fmt, unit) => {
+  if (val === null || val === undefined) return '—';
+  if (fmt === 'currency') return unit + formatNumber(val);
+  if (fmt === 'decimal')  return val.toFixed(2) + unit;
+  return formatNumber(val) + (unit ? ' ' + unit : '');
+};
+
 /**
  * Thông báo khi rule kích hoạt
  */
-const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, actionMessage, conditions, alertType = 'info' }) => {
+const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, actionType = 'notify', evaluations = [] }) => {
   try {
-    // Lấy tất cả admin users (vì chỉ có 1 admin nên dùng query đơn giản)
     const userResult = await query(`SELECT id FROM users LIMIT 1`);
     if (userResult.rowCount === 0) return { success: false };
 
@@ -355,38 +392,72 @@ const sendRuleNotification = async ({ ruleName, objectName, objectType, platform
     const emails = await getRecipientEmails(userId);
     if (emails.length === 0) return { success: false, message: 'Chưa cài đặt email' };
 
-    const platformLabels = { google: 'Google Ads', facebook: 'Facebook Ads', tiktok: 'TikTok Ads' };
-    const headerColor = alertType === 'warning' ? '#D97706' : alertType === 'error' ? '#DC2626' : '#2563EB';
+    const cfg         = ACTION_CFG[actionType] || ACTION_CFG.notify;
+    const typeLabel   = TYPE_LABELS[objectType] || objectType;
+    const platLabel   = PLATFORM_LABELS_MAP[platform] || platform;
 
-    const html = `
-<!DOCTYPE html>
+    // Bảng điều kiện với giá trị thực tế
+    const condRows = evaluations
+      .filter(e => e.actualValue !== null && e.condition.metric !== 'time' && e.condition.metric !== 'name')
+      .map(e => {
+        const mc = METRIC_CFG[e.condition.metric] || { label: e.condition.metric, unit: '', fmt: 'number' };
+        const opLbl     = OP_LABELS[e.condition.operator] || e.condition.operator;
+        const targetStr = fmtMetricVal(e.condition.value, mc.fmt, mc.unit);
+        const actualStr = fmtMetricVal(e.actualValue,     mc.fmt, mc.unit);
+        return `<tr>
+          <td style="padding:10px 14px;font-size:13px;color:#374151;border-bottom:1px solid #F1F5F9;">${mc.label}</td>
+          <td style="padding:10px 14px;font-size:13px;color:#6B7280;text-align:center;border-bottom:1px solid #F1F5F9;">${opLbl} ${targetStr}</td>
+          <td style="padding:10px 14px;font-size:13px;font-weight:700;color:${cfg.color};text-align:right;border-bottom:1px solid #F1F5F9;">${actualStr}</td>
+        </tr>`;
+      }).join('');
+
+    const html = `<!DOCTYPE html>
 <html>
-<body style="margin:0;padding:0;background:#F1F5F9;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-  <div style="max-width:600px;margin:0 auto;padding:24px;">
-    <div style="background:${headerColor};color:#FFFFFF;padding:20px;border-radius:12px 12px 0 0;">
-      <h1 style="margin:0;font-size:18px;">⚡ Rule kích hoạt</h1>
-      <div style="font-size:13px;opacity:0.9;margin-top:4px;">${ruleName}</div>
-    </div>
-    <div style="background:#FFFFFF;padding:24px;border-radius:0 0 12px 12px;">
-      <div style="margin-bottom:16px;">
-        <div style="font-size:12px;color:#64748B;margin-bottom:4px;">Đối tượng</div>
-        <div style="font-size:15px;font-weight:600;color:#1E293B;">${objectName}</div>
-        <div style="font-size:12px;color:#94A3B8;margin-top:2px;">${platformLabels[platform]} · ${accountName}</div>
-      </div>
-      <div style="background:#F1F5F9;padding:14px;border-radius:8px;margin-bottom:16px;">
-        <div style="font-size:13px;color:#1E293B;">${actionMessage}</div>
-      </div>
-      <div style="font-size:12px;color:#94A3B8;border-top:1px solid #E2E8F0;padding-top:12px;">
-        Thời gian: ${dayjs().format('HH:mm DD/MM/YYYY')}
-      </div>
-    </div>
+<head><meta charset="UTF-8"><title>Rule Notification</title></head>
+<body style="margin:0;padding:0;background:#F2F4F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px;">
+<div style="border-radius:14px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.08);">
+
+  <div style="background:${cfg.color};padding:18px 22px;">
+    <div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;">Rule kích hoạt</div>
+    <div style="color:#FFFFFF;font-size:18px;font-weight:700;">${cfg.icon} ${cfg.label}: ${objectName}</div>
+    <div style="color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px;">${ruleName}</div>
   </div>
+
+  <div style="background:#FFFFFF;padding:20px 22px;">
+    <div style="background:#F8FAFC;border-radius:8px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">Đối tượng bị tác động</div>
+      <div style="font-size:16px;font-weight:700;color:#1E293B;">${objectName}</div>
+      <div style="font-size:12px;color:#64748B;margin-top:4px;">${typeLabel} &nbsp;·&nbsp; ${platLabel} &nbsp;·&nbsp; ${accountName}</div>
+    </div>
+
+    ${condRows ? `
+    <div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Điều kiện kích hoạt</div>
+    <div style="border:1px solid #E8ECF0;border-radius:8px;overflow:hidden;">
+      <table style="width:100%;border-collapse:collapse;">
+        <tr style="background:#F8F9FB;">
+          <td style="padding:8px 14px;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.8px;">CHỈ SỐ</td>
+          <td style="padding:8px 14px;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.8px;text-align:center;">MỤC TIÊU</td>
+          <td style="padding:8px 14px;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.8px;text-align:right;">SỐ LÚC KÍCH HOẠT</td>
+        </tr>
+        ${condRows}
+      </table>
+    </div>` : ''}
+  </div>
+
+  <div style="background:#F8FAFC;padding:12px 22px;border-top:1px solid #E8ECF0;">
+    <div style="font-size:12px;color:#94A3B8;">Thời gian: ${dayjs().format('HH:mm DD/MM/YYYY')} &nbsp;·&nbsp; AdsPro Tự động</div>
+  </div>
+
+</div>
+</div>
 </body>
 </html>`;
 
+    const actionLabel = cfg.label;
     return await sendEmail({
       to: emails,
-      subject: `[AdsPro] ${ruleName} → ${objectName}`,
+      subject: `[AdsPro] ${actionLabel}: ${objectName} — ${ruleName}`,
       html,
       userId,
     });

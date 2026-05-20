@@ -109,32 +109,31 @@ const STRING_OPS = {
  */
 const evaluateCondition = async (condition, object, account) => {
   if (condition.metric === 'time') {
-    // Kiểm tra có nằm trong khung giờ không
     const now = dayjs().tz('Asia/Ho_Chi_Minh');
     const currentMinutes = now.hour() * 60 + now.minute();
     const [sH, sM] = (condition.timeStart || '00:00').split(':').map(Number);
     const [eH, eM] = (condition.timeEnd || '23:59').split(':').map(Number);
     const startMin = sH * 60 + sM;
     const endMin = eH * 60 + eM;
-    return currentMinutes >= startMin && currentMinutes <= endMin;
+    return { passed: currentMinutes >= startMin && currentMinutes <= endMin, actualValue: null };
   }
 
   if (condition.metric === 'name') {
     const nameOp = STRING_OPS[condition.operator];
-    if (!nameOp) return false;
+    if (!nameOp) return { passed: false, actualValue: null };
     const objectName = object.name || '';
     const condValue = String(condition.value || '');
-    if (!condValue) return false;
-    return nameOp(objectName, condValue);
+    if (!condValue) return { passed: false, actualValue: null };
+    return { passed: nameOp(objectName, condValue), actualValue: null };
   }
 
   const value = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account);
-  if (value === null) return false;
+  if (value === null) return { passed: false, actualValue: null };
 
   const op = OPERATORS[condition.operator];
-  if (!op) return false;
+  if (!op) return { passed: false, actualValue: null };
 
-  return op(value, condition.value);
+  return { passed: op(value, condition.value), actualValue: value };
 };
 
 /**
@@ -146,7 +145,7 @@ const evaluateAllConditions = async (conditions, logic, object, account) => {
   const results = [];
   for (const cond of conditions) {
     const r = await evaluateCondition(cond, object, account);
-    results.push({ condition: cond, result: r });
+    results.push({ condition: cond, result: r.passed, actualValue: r.actualValue });
   }
 
   let passed;
@@ -162,7 +161,7 @@ const evaluateAllConditions = async (conditions, logic, object, account) => {
 /**
  * Thực thi 1 action
  */
-const executeAction = async (action, object, account, rule) => {
+const executeAction = async (action, object, account, rule, evaluations = []) => {
   const service = getService(account.platform);
 
   try {
@@ -174,8 +173,11 @@ const executeAction = async (action, object, account, rule) => {
           await service.toggleCampaignStatus(account.credentials, object.external_id, false);
           await query(
             'UPDATE campaigns SET status = $1 WHERE id = $2',
-            [account.platform === 'google' ? 'PAUSED' : 'PAUSED', object.id]
+            ['PAUSED', object.id]
           );
+        }
+        if (rule.email_notify) {
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'pause', evaluations });
         }
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
 
@@ -189,50 +191,27 @@ const executeAction = async (action, object, account, rule) => {
             [account.platform === 'google' ? 'ENABLED' : 'ACTIVE', object.id]
           );
         }
+        if (rule.email_notify) {
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'enable', evaluations });
+        }
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
 
       case 'notify':
       case 'send_email':
       case 'gui_thong_bao':
         if (rule.email_notify) {
-          await sendRuleNotification({
-            ruleName: rule.name,
-            objectName: object.name,
-            objectType: object.type,
-            platform: account.platform,
-            accountName: account.account_name,
-            actionMessage: action.message || 'Rule đã được kích hoạt',
-            conditions: rule.conditions,
-          });
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'notify', evaluations });
         }
         return { success: true, action: 'notify', message: `Đã gửi email thông báo` };
 
       case 'warn_complete':
       case 'canh_bao_hoan_thanh':
-        await sendRuleNotification({
-          ruleName: rule.name,
-          objectName: object.name,
-          objectType: object.type,
-          platform: account.platform,
-          accountName: account.account_name,
-          actionMessage: action.message || `Cảnh báo: ${object.name} sắp hoàn thành mục tiêu`,
-          conditions: rule.conditions,
-          alertType: 'warning',
-        });
+        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'warn_complete', evaluations });
         return { success: true, action: 'warn_complete', message: 'Đã gửi cảnh báo sắp hoàn thành' };
 
       case 'warn_threshold':
       case 'canh_bao_vuot_nguong':
-        await sendRuleNotification({
-          ruleName: rule.name,
-          objectName: object.name,
-          objectType: object.type,
-          platform: account.platform,
-          accountName: account.account_name,
-          actionMessage: action.message || `Cảnh báo: ${object.name} sắp vượt ngưỡng cho phép`,
-          conditions: rule.conditions,
-          alertType: 'warning',
-        });
+        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'warn_threshold', evaluations });
         return { success: true, action: 'warn_threshold', message: 'Đã gửi cảnh báo vượt ngưỡng' };
 
       default:
@@ -332,7 +311,7 @@ const executeRule = async (rule) => {
         // Thực thi actions
         const actionsResults = [];
         for (const action of rule.actions) {
-          const r = await executeAction(action, target, account, rule);
+          const r = await executeAction(action, target, account, rule, evalResult.evaluations);
           actionsResults.push(r);
         }
 
