@@ -300,7 +300,7 @@ const listTargets = asyncHandler(async (req, res) => {
     `;
     params = [...baseParams];
     if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ' ORDER BY c.name, ag.name LIMIT 500';
+    sql += ` ORDER BY CASE WHEN ag.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, c.name, ag.name LIMIT 500`;
   } else if (scope === 'ad') {
     sql = `
       SELECT ads.id, ads.name, ads.status, ads.external_id,
@@ -312,7 +312,7 @@ const listTargets = asyncHandler(async (req, res) => {
     `;
     params = [...baseParams];
     if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ' ORDER BY c.name, ads.name LIMIT 500';
+    sql += ` ORDER BY CASE WHEN ads.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, c.name, ads.name LIMIT 500`;
   } else {
     sql = `
       SELECT c.id, c.name, c.status, c.external_id,
@@ -323,7 +323,7 @@ const listTargets = asyncHandler(async (req, res) => {
     `;
     params = [...baseParams];
     if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ' ORDER BY a.account_name, c.name LIMIT 1000';
+    sql += ` ORDER BY CASE WHEN c.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, a.account_name, c.name LIMIT 1000`;
   }
 
   const result = await query(sql, params);

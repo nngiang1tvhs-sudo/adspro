@@ -358,7 +358,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
   const [conditions, setConditions] = useState(rule?.conditions || [
     { metric: 'spend', operator: '>', value: 0, timeRange: 'today' }
   ]);
-  const [actions, setActions] = useState(rule?.actions || [{ type: 'notify' }]);
+  const [action, setAction] = useState((rule?.actions || [{ type: 'notify' }])[0]?.type || 'notify');
   const [saving, setSaving] = useState(false);
   const [targetMode, setTargetMode] = useState(rule?.target_mode || 'all');
   const [selectedTargets, setSelectedTargets] = useState(rule?.target_ids || []);
@@ -380,19 +380,10 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
     setConditions(newConds);
   };
 
-  const toggleAction = (type) => {
-    if (actions.find(a => a.type === type)) {
-      setActions(actions.filter(a => a.type !== type));
-    } else {
-      setActions([...actions, { type }]);
-    }
-  };
 
   const handleSubmit = async () => {
     if (!name) return toast.error('Vui lòng nhập tên rule');
     if (conditions.length === 0) return toast.error('Vui lòng thêm ít nhất 1 điều kiện');
-    if (actions.length === 0) return toast.error('Vui lòng chọn ít nhất 1 hành động');
-
     setSaving(true);
     try {
       const data = {
@@ -400,7 +391,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
         account_id: accountId || null,
         name, description, scope,
         conditions, conditions_logic: conditionsLogic,
-        actions,
+        actions: [{ type: action }],
         cooldown_minutes: Number(cooldown),
         is_active: isActive,
         email_notify: emailNotify,
@@ -640,27 +631,30 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Actions - single select */}
           <div>
             <label className="label">Hành động *</label>
             <div className="grid grid-cols-2 gap-2">
               {ACTION_TYPES.map(at => {
-                const isSelected = actions.find(a => a.type === at.key);
+                const isSelected = action === at.key;
                 const colorClass = {
-                  green: isSelected ? 'bg-emerald-50 border-emerald-300 text-emerald-700' : 'bg-white border-slate-200',
-                  red: isSelected ? 'bg-red-50 border-red-300 text-red-700' : 'bg-white border-slate-200',
-                  blue: isSelected ? 'bg-blue-50 border-blue-300 text-blue-700' : 'bg-white border-slate-200',
-                  amber: isSelected ? 'bg-amber-50 border-amber-300 text-amber-700' : 'bg-white border-slate-200',
-                  orange: isSelected ? 'bg-orange-50 border-orange-300 text-orange-700' : 'bg-white border-slate-200',
+                  green: isSelected ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-white border-slate-200 text-slate-600',
+                  red: isSelected ? 'bg-red-50 border-red-400 text-red-700' : 'bg-white border-slate-200 text-slate-600',
+                  blue: isSelected ? 'bg-blue-50 border-blue-400 text-blue-700' : 'bg-white border-slate-200 text-slate-600',
+                  amber: isSelected ? 'bg-amber-50 border-amber-400 text-amber-700' : 'bg-white border-slate-200 text-slate-600',
+                  orange: isSelected ? 'bg-orange-50 border-orange-400 text-orange-700' : 'bg-white border-slate-200 text-slate-600',
                 }[at.color];
                 return (
                   <button
                     key={at.key}
                     type="button"
-                    onClick={() => toggleAction(at.key)}
-                    className={`p-3 rounded-lg border-2 text-left transition-colors ${colorClass}`}
+                    onClick={() => setAction(at.key)}
+                    className={`p-3 rounded-lg border-2 text-left transition-colors flex items-center gap-2 ${colorClass}`}
                   >
-                    <div className="text-sm font-medium">{at.label}</div>
+                    <span className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${isSelected ? 'border-current' : 'border-slate-300'}`}>
+                      {isSelected && <span className="w-2 h-2 rounded-full bg-current" />}
+                    </span>
+                    <span className="text-sm font-medium">{at.label}</span>
                   </button>
                 );
               })}

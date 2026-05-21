@@ -279,9 +279,15 @@ const executeRule = async (rule) => {
       }
 
       // Lọc theo target cụ thể nếu có
-      if (rule.target_mode === 'specific' && Array.isArray(rule.target_ids) && rule.target_ids.length > 0) {
-        const allowedIds = new Set(rule.target_ids.map(t => (typeof t === 'object' ? t.id : t)));
-        targets = targets.filter(t => allowedIds.has(t.id));
+      if (rule.target_mode === 'specific') {
+        const rawIds = Array.isArray(rule.target_ids) ? rule.target_ids
+          : (typeof rule.target_ids === 'string' ? JSON.parse(rule.target_ids) : []);
+        if (rawIds.length > 0) {
+          const allowedIds = new Set(rawIds.map(t => Number(typeof t === 'object' ? t.id : t)));
+          targets = targets.filter(t => allowedIds.has(Number(t.id)));
+        } else {
+          targets = []; // specific mode nhưng chưa chọn target → không chạy
+        }
       }
 
       let lastTriggeredAt = rule.last_triggered_at;
@@ -307,6 +313,17 @@ const executeRule = async (rule) => {
         if (!evalResult.passed) {
           continue;
         }
+
+        // Bỏ qua nếu action đã được thực hiện (tránh trigger lặp)
+        const actionTypes = rule.actions.map(a => a.type);
+        const hasPause = actionTypes.some(t => ['pause', 'tat', 'turn_off'].includes(t));
+        const hasEnable = actionTypes.some(t => ['enable', 'bat', 'turn_on'].includes(t));
+        const targetStatus = (target.status || '').toUpperCase();
+        const isAlreadyPaused = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'].includes(targetStatus);
+        const isAlreadyActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(targetStatus);
+
+        if (hasPause && isAlreadyPaused) continue; // Đã tắt rồi, bỏ qua
+        if (hasEnable && isAlreadyActive) continue; // Đã bật rồi, bỏ qua
 
         // Thực thi actions
         const actionsResults = [];
