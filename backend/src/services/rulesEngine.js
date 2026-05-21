@@ -42,14 +42,8 @@ const OPERATORS = {
  * Lấy giá trị metric của 1 đối tượng (campaign/adgroup/ad) cho khoảng thời gian
  */
 const getMetricValue = async (object, metric, timeRange, account) => {
-  if (metric === 'time') return null; // Xử lý riêng cho time
+  if (metric === 'time') return null;
 
-  // Nếu metrics đã có sẵn (real-time data)
-  if (object.metrics && timeRange === 'today' && object.metrics[metric] !== undefined) {
-    return Number(object.metrics[metric]);
-  }
-
-  // Lấy từ daily_metrics
   const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
   let fromDate;
 
@@ -79,14 +73,14 @@ const getMetricValue = async (object, metric, timeRange, account) => {
 
   let sql, params;
   if (object.type === 'campaign') {
-    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE campaign_id = $1 AND date >= $2`;
-    params = [object.id, fromDate];
+    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE campaign_id = $1 AND date BETWEEN $2 AND $3`;
+    params = [object.id, fromDate, today];
   } else if (object.type === 'ad_group') {
-    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE ad_group_id = $1 AND date >= $2`;
-    params = [object.id, fromDate];
+    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE ad_group_id = $1 AND date BETWEEN $2 AND $3`;
+    params = [object.id, fromDate, today];
   } else if (object.type === 'ad') {
-    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date >= $2`;
-    params = [object.id, fromDate];
+    sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date BETWEEN $2 AND $3`;
+    params = [object.id, fromDate, today];
   } else {
     return null;
   }
