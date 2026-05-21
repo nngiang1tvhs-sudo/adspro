@@ -171,7 +171,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           );
         }
         if (rule.email_notify) {
-          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'pause', evaluations });
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
         }
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
 
@@ -186,7 +186,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           );
         }
         if (rule.email_notify) {
-          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'enable', evaluations });
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
         }
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
 
@@ -194,18 +194,18 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
       case 'send_email':
       case 'gui_thong_bao':
         if (rule.email_notify) {
-          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'notify', evaluations });
+          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'notify', evaluations });
         }
         return { success: true, action: 'notify', message: `Đã gửi email thông báo` };
 
       case 'warn_complete':
       case 'canh_bao_hoan_thanh':
-        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'warn_complete', evaluations });
+        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'warn_complete', evaluations });
         return { success: true, action: 'warn_complete', message: 'Đã gửi cảnh báo sắp hoàn thành' };
 
       case 'warn_threshold':
       case 'canh_bao_vuot_nguong':
-        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, actionType: 'warn_threshold', evaluations });
+        await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'warn_threshold', evaluations });
         return { success: true, action: 'warn_threshold', message: 'Đã gửi cảnh báo vượt ngưỡng' };
 
       default:
@@ -228,7 +228,7 @@ const executeRule = async (rule) => {
     await query('UPDATE rules SET last_run_at = CURRENT_TIMESTAMP, total_runs = total_runs + 1 WHERE id = $1', [rule.id]);
 
     // Lấy account
-    let accountSql = `SELECT id, platform, account_name, credentials FROM ad_accounts WHERE id = $1`;
+    let accountSql = `SELECT id, platform, account_name, credentials, currency FROM ad_accounts WHERE id = $1`;
     let accounts;
 
     if (rule.account_id) {
@@ -236,7 +236,7 @@ const executeRule = async (rule) => {
     } else {
       // Apply cho tất cả accounts của platform
       accounts = await query(
-        `SELECT id, platform, account_name, credentials FROM ad_accounts WHERE user_id = $1 AND platform = $2 AND status = 'active'`,
+        `SELECT id, platform, account_name, credentials, currency FROM ad_accounts WHERE user_id = $1 AND platform = $2 AND status = 'active'`,
         [rule.user_id, rule.platform]
       );
     }

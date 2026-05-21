@@ -249,9 +249,16 @@ const buildDailyReportHtml = (data) => {
 </html>`;
 };
 
-const formatShort = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
+const formatShort    = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const formatCurrency = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const formatNumber   = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
+
+const CURRENCY_SYMBOLS = {
+  VND: '₫', USD: '$', JPY: '¥', EUR: '€', GBP: '£',
+  KRW: '₩', THB: '฿', SGD: 'S$', MYR: 'RM', IDR: 'Rp',
+  PHP: '₱', TWD: 'NT$', HKD: 'HK$', AUD: 'A$', CAD: 'CA$',
+};
+const getCurrencySymbol = (currency) => CURRENCY_SYMBOLS[currency?.toUpperCase()] || (currency || '₫');
 
 /**
  * Gửi báo cáo sáng cho 1 user
@@ -374,17 +381,18 @@ const TYPE_LABELS = { campaign: 'Chiến dịch', ad_group: 'Nhóm quảng cáo'
 const PLATFORM_LABELS_MAP = { google: 'Google Ads', facebook: 'Facebook Ads', tiktok: 'TikTok Ads' };
 const OP_LABELS = { '>': '>', '<': '<', '>=': '≥', '<=': '≤', '=': '=', '!=': '≠' };
 
-const fmtMetricVal = (val, fmt, unit) => {
+const fmtMetricVal = (val, fmt, unit, currencyOverride) => {
   if (val === null || val === undefined) return '—';
-  if (fmt === 'currency') return unit + formatNumber(val);
-  if (fmt === 'decimal')  return val.toFixed(2) + unit;
-  return formatNumber(val) + (unit ? ' ' + unit : '');
+  const displayUnit = (fmt === 'currency' && currencyOverride) ? getCurrencySymbol(currencyOverride) : unit;
+  if (fmt === 'currency') return displayUnit + formatNumber(val);
+  if (fmt === 'decimal')  return val.toFixed(2) + displayUnit;
+  return formatNumber(val) + (displayUnit ? ' ' + displayUnit : '');
 };
 
 /**
  * Thông báo khi rule kích hoạt
  */
-const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, actionType = 'notify', evaluations = [] }) => {
+const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, currency, actionType = 'notify', evaluations = [] }) => {
   try {
     const userResult = await query(`SELECT id FROM users LIMIT 1`);
     if (userResult.rowCount === 0) return { success: false };
@@ -403,8 +411,8 @@ const sendRuleNotification = async ({ ruleName, objectName, objectType, platform
       .map(e => {
         const mc = METRIC_CFG[e.condition.metric] || { label: e.condition.metric, unit: '', fmt: 'number' };
         const opLbl     = OP_LABELS[e.condition.operator] || e.condition.operator;
-        const targetStr = fmtMetricVal(e.condition.value, mc.fmt, mc.unit);
-        const actualStr = fmtMetricVal(e.actualValue,     mc.fmt, mc.unit);
+        const targetStr = fmtMetricVal(e.condition.value, mc.fmt, mc.unit, currency);
+        const actualStr = fmtMetricVal(e.actualValue,     mc.fmt, mc.unit, currency);
         return `<tr>
           <td style="padding:10px 14px;font-size:13px;color:#374151;border-bottom:1px solid #F1F5F9;">${mc.label}</td>
           <td style="padding:10px 14px;font-size:13px;color:#6B7280;text-align:center;border-bottom:1px solid #F1F5F9;">${opLbl} ${targetStr}</td>
