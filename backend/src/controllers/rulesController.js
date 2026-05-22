@@ -68,7 +68,7 @@ const createRule = asyncHandler(async (req, res) => {
     platform, account_id, name, description, scope,
     conditions, conditions_logic, actions,
     cooldown_minutes, is_active, email_notify,
-    target_mode, target_ids,
+    target_mode, target_ids, target_status_filter,
   } = req.body;
 
   // Validate
@@ -99,8 +99,8 @@ const createRule = asyncHandler(async (req, res) => {
 
   const result = await query(
     `INSERT INTO rules
-     (user_id, platform, account_id, name, description, scope, conditions, conditions_logic, actions, cooldown_minutes, is_active, email_notify, target_mode, target_ids)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+     (user_id, platform, account_id, name, description, scope, conditions, conditions_logic, actions, cooldown_minutes, is_active, email_notify, target_mode, target_ids, target_status_filter)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      RETURNING *`,
     [
       req.user.id, platform, account_id || null, name, description || null,
@@ -108,6 +108,7 @@ const createRule = asyncHandler(async (req, res) => {
       JSON.stringify(actions), cooldown_minutes || 60,
       is_active !== false, email_notify !== false,
       target_mode || 'all', JSON.stringify(target_ids || []),
+      target_status_filter || 'all',
     ]
   );
 
@@ -142,7 +143,7 @@ const updateRule = asyncHandler(async (req, res) => {
   const params = [];
   let idx = 1;
 
-  const fields = ['name', 'description', 'scope', 'conditions_logic', 'cooldown_minutes', 'is_active', 'email_notify', 'account_id', 'target_mode'];
+  const fields = ['name', 'description', 'scope', 'conditions_logic', 'cooldown_minutes', 'is_active', 'email_notify', 'account_id', 'target_mode', 'target_status_filter'];
   for (const field of fields) {
     if (req.body[field] !== undefined) {
       updates.push(`${field} = $${idx++}`);
