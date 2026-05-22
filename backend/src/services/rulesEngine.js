@@ -242,25 +242,45 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
 };
 
 /**
+ * Kiểm tra cooldown theo từng target riêng biệt (tra rule_history).
+ * Mỗi campaign/ad_group/ad có cooldown độc lập — target A trigger không ảnh hưởng target B.
+ */
+const isTargetInCooldown = async (ruleId, targetExternalId, cooldownMinutes) => {
+  if (!cooldownMinutes || cooldownMinutes <= 0) return false;
+  const res = await query(
+    `SELECT created_at FROM rule_history
+     WHERE rule_id = $1 AND target_id = $2 AND status = 'success'
+     ORDER BY created_at DESC LIMIT 1`,
+    [ruleId, String(targetExternalId)]
+  );
+  if (res.rowCount === 0) return false;
+  const elapsed = Date.now() - new Date(res.rows[0].created_at).getTime();
+  return elapsed < cooldownMinutes * 60 * 1000;
+};
+
+/**
  * Thực thi 1 rule
  */
 const executeRule = async (rule) => {
   const startTime = Date.now();
 
   try {
-    // Cập nhật last_run_at
-    await query('UPDATE rules SET last_run_at = CURRENT_TIMESTAMP, total_runs = total_runs + 1 WHERE id = $1', [rule.id]);
+    await query(
+      'UPDATE rules SET last_run_at = CURRENT_TIMESTAMP, total_runs = total_runs + 1 WHERE id = $1',
+      [rule.id]
+    );
 
-    // Lấy account
-    let accountSql = `SELECT id, platform, account_name, credentials, currency FROM ad_accounts WHERE id = $1`;
+    // Lấy danh sách account cần xử lý
     let accounts;
-
     if (rule.account_id) {
-      accounts = await query(accountSql, [rule.account_id]);
-    } else {
-      // Apply cho tất cả accounts của platform
       accounts = await query(
-        `SELECT id, platform, account_name, credentials, currency FROM ad_accounts WHERE user_id = $1 AND platform = $2 AND status = 'active'`,
+        `SELECT id, platform, account_name, credentials, currency FROM ad_accounts WHERE id = $1`,
+        [rule.account_id]
+      );
+    } else {
+      accounts = await query(
+        `SELECT id, platform, account_name, credentials, currency
+         FROM ad_accounts WHERE user_id = $1 AND platform = $2 AND status = 'active'`,
         [rule.user_id, rule.platform]
       );
     }
@@ -275,7 +295,6 @@ const executeRule = async (rule) => {
     for (const account of accounts.rows) {
       // Lấy targets theo scope
       let targets = [];
-
       if (rule.scope === 'campaign') {
         const r = await query(
           'SELECT id, external_id, name, status, metrics FROM campaigns WHERE account_id = $1',
@@ -296,7 +315,7 @@ const executeRule = async (rule) => {
         targets = r.rows.map(a => ({ ...a, type: 'ad' }));
       }
 
-      // Lọc theo target cụ thể nếu có
+      // Lọc target cụ thể nếu có
       if (rule.target_mode === 'specific') {
         const rawIds = Array.isArray(rule.target_ids) ? rule.target_ids
           : (typeof rule.target_ids === 'string' ? JSON.parse(rule.target_ids) : []);
@@ -304,20 +323,16 @@ const executeRule = async (rule) => {
           const allowedIds = new Set(rawIds.map(t => Number(typeof t === 'object' ? t.id : t)));
           targets = targets.filter(t => allowedIds.has(Number(t.id)));
         } else {
-          targets = []; // specific mode nhưng chưa chọn target → không chạy
+          targets = [];
         }
       }
 
-      let lastTriggeredAt = rule.last_triggered_at;
-
-    for (const target of targets) {
-        // Kiểm tra cooldown (dùng biến local để phản ánh trigger trong cùng lần chạy)
-        if (lastTriggeredAt) {
-          const cooldownMs = (rule.cooldown_minutes || 60) * 60 * 1000;
-          const sinceLastTrigger = Date.now() - new Date(lastTriggeredAt).getTime();
-          if (sinceLastTrigger < cooldownMs) {
-            continue;
-          }
+      for (const target of targets) {
+        // --- Cooldown per-target: mỗi campaign có cooldown độc lập ---
+        const inCooldown = await isTargetInCooldown(rule.id, target.external_id, rule.cooldown_minutes);
+        if (inCooldown) {
+          logger.debug(`Rule ${rule.id} - "${target.name}" đang trong cooldown, bỏ qua`);
+          continue;
         }
 
         // Đánh giá conditions
@@ -328,22 +343,19 @@ const executeRule = async (rule) => {
           account
         );
 
-        if (!evalResult.passed) {
-          continue;
-        }
+        if (!evalResult.passed) continue;
 
-        // Bỏ qua nếu action đã được thực hiện (tránh trigger lặp)
+        // Với action pause/enable: bỏ qua nếu status đã đúng rồi
         const actionTypes = rule.actions.map(a => a.type);
-        const hasPause = actionTypes.some(t => ['pause', 'tat', 'turn_off'].includes(t));
-        const hasEnable = actionTypes.some(t => ['enable', 'bat', 'turn_on'].includes(t));
-        const targetStatus = (target.status || '').toUpperCase();
+        const hasPause  = actionTypes.some(t => ['pause',  'tat',  'turn_off'].includes(t));
+        const hasEnable = actionTypes.some(t => ['enable', 'bat',  'turn_on' ].includes(t));
+        const targetStatus    = (target.status || '').toUpperCase();
         const isAlreadyPaused = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'].includes(targetStatus);
         const isAlreadyActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(targetStatus);
+        if (hasPause  && isAlreadyPaused) continue;
+        if (hasEnable && isAlreadyActive) continue;
 
-        if (hasPause && isAlreadyPaused) continue; // Đã tắt rồi, bỏ qua
-        if (hasEnable && isAlreadyActive) continue; // Đã bật rồi, bỏ qua
-
-        // Thực thi actions
+        // Thực thi tất cả actions
         const actionsResults = [];
         for (const action of rule.actions) {
           const r = await executeAction(action, target, account, rule, evalResult.evaluations);
@@ -351,41 +363,36 @@ const executeRule = async (rule) => {
         }
 
         const allSuccess = actionsResults.every(r => r.success);
-        const status = allSuccess ? 'success' : 'failed';
+        const status   = allSuccess ? 'success' : 'failed';
         const messages = actionsResults.map(r => r.message).join('; ');
 
-        // Lưu history
+        // Lưu history (target_id = external_id để cooldown query đúng)
         await query(
-          `INSERT INTO rule_history (rule_id, account_id, target_type, target_id, target_name, status, message, conditions_evaluated, actions_taken)
+          `INSERT INTO rule_history
+             (rule_id, account_id, target_type, target_id, target_name, status, message, conditions_evaluated, actions_taken)
            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
           [
-            rule.id,
-            account.id,
-            target.type,
-            target.external_id,
-            target.name,
-            status,
-            messages,
+            rule.id, account.id,
+            target.type, String(target.external_id), target.name,
+            status, messages,
             JSON.stringify(evalResult.evaluations),
             JSON.stringify(actionsResults),
           ]
         );
 
-        // Cập nhật last_triggered_at (cả DB lẫn local để cooldown đúng trong cùng lần chạy)
-        const nowTs = new Date().toISOString();
-        lastTriggeredAt = nowTs;
+        // Cập nhật thống kê rule (chỉ mang tính thống kê, không dùng cho cooldown)
         await query(
           'UPDATE rules SET last_triggered_at = CURRENT_TIMESTAMP, total_triggers = total_triggers + 1 WHERE id = $1',
           [rule.id]
         );
 
         await logEvent({
-          userId: rule.user_id,
+          userId:    rule.user_id,
           accountId: account.id,
           eventType: EVENT_TYPES.RULE_TRIGGERED,
-          level: status === 'success' ? 'success' : 'error',
-          message: `Rule "${rule.name}" → ${target.name}: ${messages}`,
-          details: { rule_id: rule.id, target: target.name, actions: actionsResults },
+          level:     status === 'success' ? 'success' : 'error',
+          message:   `Rule "${rule.name}" → ${target.name}: ${messages}`,
+          details:   { rule_id: rule.id, target: target.name, actions: actionsResults },
         });
 
         allResults.push({ target: target.name, status, actions: actionsResults });
