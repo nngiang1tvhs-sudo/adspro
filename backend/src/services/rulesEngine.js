@@ -248,13 +248,13 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
 const isTargetInCooldown = async (ruleId, targetExternalId, cooldownMinutes) => {
   if (!cooldownMinutes || cooldownMinutes <= 0) return false;
   const res = await query(
-    `SELECT created_at FROM rule_history
+    `SELECT executed_at FROM rule_history
      WHERE rule_id = $1 AND target_id = $2 AND status = 'success'
-     ORDER BY created_at DESC LIMIT 1`,
+     ORDER BY executed_at DESC LIMIT 1`,
     [ruleId, String(targetExternalId)]
   );
   if (res.rowCount === 0) return false;
-  const elapsed = Date.now() - new Date(res.rows[0].created_at).getTime();
+  const elapsed = Date.now() - new Date(res.rows[0].executed_at).getTime();
   return elapsed < cooldownMinutes * 60 * 1000;
 };
 
