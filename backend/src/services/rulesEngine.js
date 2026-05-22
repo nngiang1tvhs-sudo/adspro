@@ -53,7 +53,7 @@ const OPERATORS = {
  * @param {object|null} liveMetrics - Metrics live từ API (null = dùng cache)
  */
 const getMetricValue = async (object, metric, timeRange, account, liveMetrics = null) => {
-  if (metric === 'time') return null;
+  if (metric === 'time') return { value: null, source: 'time' };
 
   const colMap = {
     spend: 'spend', impressions: 'impressions', clicks: 'clicks',
@@ -64,7 +64,7 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
   };
 
   const column = colMap[metric];
-  if (!column) return null;
+  if (!column) return { value: null, source: 'unknown_metric' };
 
   if (timeRange === 'today' || !timeRange) {
     const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
@@ -74,7 +74,7 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
     if (liveMetrics !== null) {
       const val = liveMetrics[metric] ?? liveMetrics[column];
       const numVal = Number(val ?? 0);
-      if (numVal > 0) return numVal;
+      if (numVal > 0) return { value: numVal, source: 'live_api' };
     }
 
     // Ưu tiên 2: daily_metrics hôm nay trong DB (từ lần sync gần nhất)
@@ -89,21 +89,21 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
       sql2 = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date = $2`;
       params2 = [object.id, today];
     } else {
-      return 0;
+      return { value: 0, source: 'no_type' };
     }
     const dailyResult = await query(sql2, params2);
     const dailyVal = Number(dailyResult.rows[0]?.val || 0);
-    if (dailyVal > 0) return dailyVal;
+    if (dailyVal > 0) return { value: dailyVal, source: 'daily_db' };
 
     // Ưu tiên 3: campaigns.metrics từ lần sync gần nhất (dữ liệu 30 ngày — phương án cuối)
     const rawMetrics = object.metrics;
     if (rawMetrics) {
       const m = typeof rawMetrics === 'string' ? JSON.parse(rawMetrics) : rawMetrics;
       const val = m[metric] ?? m[column];
-      if (val !== undefined && val !== null) return Number(val);
+      if (val !== undefined && val !== null) return { value: Number(val), source: 'cache_30d' };
     }
 
-    return 0;
+    return { value: 0, source: 'zero_no_data' };
   }
 
   // Khoảng thời gian lịch sử (3d, 5d, 7d, all) — đọc từ daily_metrics
@@ -130,11 +130,11 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
     sql = `SELECT ${aggregator}(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date BETWEEN $2 AND $3`;
     params = [object.id, fromDate, today];
   } else {
-    return null;
+    return { value: null, source: 'no_type' };
   }
 
   const result = await query(sql, params);
-  return Number(result.rows[0]?.val || 0);
+  return { value: Number(result.rows[0]?.val || 0), source: `daily_${timeRange}` };
 };
 
 const STRING_OPS = {
@@ -170,13 +170,13 @@ const evaluateCondition = async (condition, object, account, liveMetrics = null)
     return { passed: nameOp(objectName, condValue), actualValue: null };
   }
 
-  const value = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account, liveMetrics);
-  if (value === null) return { passed: false, actualValue: null };
+  const { value, source } = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account, liveMetrics);
+  if (value === null) return { passed: false, actualValue: null, source: 'null' };
 
   const op = OPERATORS[condition.operator];
-  if (!op) return { passed: false, actualValue: null };
+  if (!op) return { passed: false, actualValue: value, source };
 
-  return { passed: op(value, condition.value), actualValue: value };
+  return { passed: op(value, condition.value), actualValue: value, source };
 };
 
 /**
@@ -189,7 +189,7 @@ const evaluateAllConditions = async (conditions, logic, object, account, liveMet
   const results = [];
   for (const cond of conditions) {
     const r = await evaluateCondition(cond, object, account, liveMetrics);
-    results.push({ condition: cond, result: r.passed, actualValue: r.actualValue });
+    results.push({ condition: cond, result: r.passed, actualValue: r.actualValue, source: r.source });
   }
 
   let passed;
@@ -322,6 +322,7 @@ const executeRule = async (rule, options = {}) => {
     }
 
     const allResults = [];
+    const debugEvals = [];
     let totalCooldownSkipped = 0;
 
     for (const account of accounts.rows) {
@@ -409,6 +410,15 @@ const executeRule = async (rule, options = {}) => {
           targetLiveMetrics
         );
 
+        // Thu thập debug info (luôn ghi, kể cả khi không trigger)
+        debugEvals.push({
+          target: target.name,
+          status: target.status,
+          passed: evalResult.passed,
+          evaluations: evalResult.evaluations,
+          liveMetricsAvailable: targetLiveMetrics !== null,
+        });
+
         if (!evalResult.passed) continue;
 
         // Với action pause/enable: bỏ qua nếu status đã đúng rồi
@@ -418,8 +428,8 @@ const executeRule = async (rule, options = {}) => {
         const targetStatus    = (target.status || '').toUpperCase();
         const isAlreadyPaused = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'].includes(targetStatus);
         const isAlreadyActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(targetStatus);
-        if (hasPause  && isAlreadyPaused) continue;
-        if (hasEnable && isAlreadyActive) continue;
+        if (hasPause  && isAlreadyPaused) { debugEvals[debugEvals.length - 1].skipped = 'already_paused'; continue; }
+        if (hasEnable && isAlreadyActive)  { debugEvals[debugEvals.length - 1].skipped = 'already_active'; continue; }
 
         // Thực thi tất cả actions
         const actionsResults = [];
@@ -471,6 +481,7 @@ const executeRule = async (rule, options = {}) => {
       triggered: allResults.length,
       cooldown_skipped: totalCooldownSkipped,
       results: allResults,
+      debug: debugEvals,
     };
 
   } catch (err) {

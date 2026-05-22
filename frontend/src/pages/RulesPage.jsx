@@ -86,6 +86,7 @@ export default function RulesPage() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
+  const [debugResult, setDebugResult] = useState(null);
 
   useEffect(() => {
     loadAccounts();
@@ -139,9 +140,10 @@ export default function RulesPage() {
       } else if (result.triggered > 0) {
         toast.success(`Rule đã trigger ${result.triggered} đối tượng`, { id: t });
       } else {
-        toast(`Rule đã chạy. Không có đối tượng nào thỏa điều kiện (triggered: 0)`, {
-          id: t, icon: 'ℹ️',
-        });
+        toast(`Không có đối tượng nào thỏa điều kiện — xem chi tiết bên dưới`, { id: t, icon: 'ℹ️' });
+      }
+      if (result.debug?.length > 0) {
+        setDebugResult({ ruleName: rule.name, ...result });
       }
       await loadRules();
     } catch (err) {
@@ -221,6 +223,44 @@ export default function RulesPage() {
           onClose={() => { setShowForm(false); setEditingRule(null); }}
           onSaved={() => { setShowForm(false); setEditingRule(null); loadRules(); }}
         />
+      )}
+
+      {debugResult && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl my-8">
+            <div className="p-4 border-b flex items-center justify-between">
+              <h2 className="font-semibold text-slate-800">Kết quả chạy: {debugResult.ruleName}</h2>
+              <button onClick={() => setDebugResult(null)} className="p-1 hover:bg-slate-100 rounded"><X size={16} /></button>
+            </div>
+            <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
+              <div className="text-sm text-slate-500">
+                Trigger: <span className="font-semibold text-slate-800">{debugResult.triggered}</span> |
+                Thời gian: <span className="font-semibold text-slate-800">{debugResult.duration}ms</span>
+              </div>
+              {debugResult.debug.map((d, i) => (
+                <div key={i} className={`border rounded-lg p-3 text-sm ${d.passed && !d.skipped ? 'border-emerald-300 bg-emerald-50' : d.skipped ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="font-medium text-slate-800">{d.target}</span>
+                    <span className="text-xs text-slate-400">({d.status})</span>
+                    {d.passed && !d.skipped && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">✓ TRIGGER</span>}
+                    {d.skipped && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded">BỎ QUA: {d.skipped}</span>}
+                    {!d.passed && <span className="text-xs bg-slate-400 text-white px-2 py-0.5 rounded">✗ Không thỏa</span>}
+                    <span className="text-xs text-slate-400 ml-auto">Live API: {d.liveMetricsAvailable ? '✓' : '✗'}</span>
+                  </div>
+                  {d.evaluations?.map((ev, j) => (
+                    <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                      <span>{ev.result ? '✓' : '✗'}</span>
+                      <span className="font-mono">{ev.condition.metric} {ev.condition.operator} {ev.condition.value}</span>
+                      <span className="text-slate-500">({ev.condition.timeRange || 'today'})</span>
+                      <span>→ Giá trị thực: <strong>{ev.actualValue ?? 'null'}</strong></span>
+                      <span className="ml-auto text-slate-400 italic">[{ev.source}]</span>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
