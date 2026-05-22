@@ -38,22 +38,25 @@ const DEFAULT_AD_COLUMNS = [
 ];
 
 // Sortable column header
-function SortableHeader({ col }) {
+function SortableHeader({ col, sortKey, sortDir, onSort }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
-  };
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.4 : 1 };
+  const isActive = sortKey === col.key;
   return (
     <th
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className="text-left px-3 py-2.5 text-[11px] font-medium text-slate-500 uppercase tracking-wide cursor-grab whitespace-nowrap bg-slate-50 border-b border-slate-200 select-none"
+      onClick={() => onSort(col.key)}
+      className="text-left px-3 py-2.5 text-[11px] font-medium text-slate-500 uppercase tracking-wide cursor-pointer whitespace-nowrap bg-slate-50 border-b border-slate-200 select-none hover:bg-slate-100"
     >
-      {col.label}
+      <span className="inline-flex items-center gap-1">
+        {col.label}
+        <span className={isActive ? 'text-blue-500' : 'text-slate-300'}>
+          {isActive ? (sortDir === 'asc' ? '↑' : '↓') : '↕'}
+        </span>
+      </span>
     </th>
   );
 }
@@ -89,6 +92,10 @@ export default function CampaignsPage() {
   const [adsetColumns, setAdsetColumns] = useState(DEFAULT_ADSET_COLUMNS);
   const [adColumns, setAdColumns] = useState(DEFAULT_AD_COLUMNS);
   const [showDrillColSettings, setShowDrillColSettings] = useState(false);
+
+  // Sort
+  const [sortKey, setSortKey] = useState(null);
+  const [sortDir, setSortDir] = useState('asc');
 
   const sensors = useSensors(useSensor(PointerSensor), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
 
@@ -144,7 +151,7 @@ export default function CampaignsPage() {
   const visibleAccounts = groupName ? accounts.filter(a => a.group_name === groupName) : accounts;
 
   // Lọc campaign client-side
-  const displayCampaigns = campaigns.filter(c => {
+  const filteredCampaigns = campaigns.filter(c => {
     if (groupName && !accountId) {
       const groupAccountIds = new Set(accounts.filter(a => a.group_name === groupName).map(a => a.id));
       if (!groupAccountIds.has(c.account_id)) return false;
@@ -156,6 +163,22 @@ export default function CampaignsPage() {
     if (status === 'REMOVED_ALL') return ['REMOVED', 'DELETED', 'ARCHIVED'].includes(c.status);
     return true;
   });
+
+  const displayCampaigns = sortKey
+    ? [...filteredCampaigns].sort((a, b) => {
+        const getVal = (c) => {
+          if (sortKey === 'name') return (c.name || '').toLowerCase();
+          if (sortKey === 'status') return c.status || '';
+          if (sortKey === 'objective') return c.objective || '';
+          if (sortKey === 'budget') return Number(c.budget || 0);
+          return Number(c.metrics?.[sortKey] ?? 0);
+        };
+        const av = getVal(a), bv = getVal(b);
+        if (av < bv) return sortDir === 'asc' ? -1 : 1;
+        if (av > bv) return sortDir === 'asc' ? 1 : -1;
+        return 0;
+      })
+    : filteredCampaigns;
 
   const handleSync = async () => {
     setLoading(true);
@@ -235,6 +258,15 @@ export default function CampaignsPage() {
       toast.success('Da cap nhat nhom cot');
     } catch (err) {
       toast.error(err.message);
+    }
+  };
+
+  const handleSort = (key) => {
+    if (sortKey === key) {
+      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortKey(key);
+      setSortDir('asc');
     }
   };
 
@@ -604,7 +636,7 @@ export default function CampaignsPage() {
                   <thead>
                     <SortableContext items={visibleColumns.map(c => c.key)} strategy={horizontalListSortingStrategy}>
                       <tr>
-                        {visibleColumns.map(col => <SortableHeader key={col.key} col={col} />)}
+                        {visibleColumns.map(col => <SortableHeader key={col.key} col={col} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />)}
                       </tr>
                     </SortableContext>
                   </thead>
