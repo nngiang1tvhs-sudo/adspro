@@ -67,13 +67,35 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
   if (!column) return null;
 
   if (timeRange === 'today' || !timeRange) {
-    // Ưu tiên 1: Live metrics từ API (chính xác nhất)
+    const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+
+    // Ưu tiên 1: Live metrics từ API — chỉ dùng nếu > 0
+    // (Facebook/TikTok có độ trễ báo cáo vài giờ, trả về 0 dù chiến dịch đang chi tiêu)
     if (liveMetrics !== null) {
       const val = liveMetrics[metric] ?? liveMetrics[column];
-      return Number(val || 0);
+      const numVal = Number(val ?? 0);
+      if (numVal > 0) return numVal;
     }
 
-    // Ưu tiên 2: campaigns.metrics từ lần sync gần nhất
+    // Ưu tiên 2: daily_metrics hôm nay trong DB (từ lần sync gần nhất)
+    let sql2, params2;
+    if (object.type === 'campaign') {
+      sql2 = `SELECT SUM(${column}) as val FROM daily_metrics WHERE campaign_id = $1 AND date = $2`;
+      params2 = [object.id, today];
+    } else if (object.type === 'ad_group') {
+      sql2 = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_group_id = $1 AND date = $2`;
+      params2 = [object.id, today];
+    } else if (object.type === 'ad') {
+      sql2 = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date = $2`;
+      params2 = [object.id, today];
+    } else {
+      return 0;
+    }
+    const dailyResult = await query(sql2, params2);
+    const dailyVal = Number(dailyResult.rows[0]?.val || 0);
+    if (dailyVal > 0) return dailyVal;
+
+    // Ưu tiên 3: campaigns.metrics từ lần sync gần nhất (dữ liệu 30 ngày — phương án cuối)
     const rawMetrics = object.metrics;
     if (rawMetrics) {
       const m = typeof rawMetrics === 'string' ? JSON.parse(rawMetrics) : rawMetrics;
@@ -81,23 +103,7 @@ const getMetricValue = async (object, metric, timeRange, account, liveMetrics = 
       if (val !== undefined && val !== null) return Number(val);
     }
 
-    // Ưu tiên 3: daily_metrics hôm nay trong DB
-    const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
-    let sql, params;
-    if (object.type === 'campaign') {
-      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE campaign_id = $1 AND date = $2`;
-      params = [object.id, today];
-    } else if (object.type === 'ad_group') {
-      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_group_id = $1 AND date = $2`;
-      params = [object.id, today];
-    } else if (object.type === 'ad') {
-      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date = $2`;
-      params = [object.id, today];
-    } else {
-      return 0;
-    }
-    const result = await query(sql, params);
-    return Number(result.rows[0]?.val || 0);
+    return 0;
   }
 
   // Khoảng thời gian lịch sử (3d, 5d, 7d, all) — đọc từ daily_metrics
