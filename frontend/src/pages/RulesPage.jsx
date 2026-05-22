@@ -256,6 +256,11 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
                 {rule.target_ids.length} {rule.scope === 'campaign' ? 'chiến dịch' : rule.scope === 'ad_group' ? 'nhóm QC' : 'QC'} đã chọn
               </span>
             )}
+            {rule.target_status_filter && rule.target_status_filter !== 'all' && (
+              <span className={`badge text-[10px] ${rule.target_status_filter === 'active' ? 'badge-success' : 'badge-warning'}`}>
+                {rule.target_status_filter === 'active' ? 'Đang chạy' : 'Đã tắt'}
+              </span>
+            )}
             {rule.email_notify && (
               <span className="badge badge-info text-[10px]"><Mail size={10} className="inline mr-1" /> Email</span>
             )}
@@ -362,6 +367,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
   const [saving, setSaving] = useState(false);
   const [targetMode, setTargetMode] = useState(rule?.target_mode || 'all');
   const [selectedTargets, setSelectedTargets] = useState(rule?.target_ids || []);
+  const [statusFilter, setStatusFilter] = useState(rule?.target_status_filter || 'all');
   const [showPicker, setShowPicker] = useState(false);
 
   const metrics = METRICS_BY_PLATFORM[platform];
@@ -397,6 +403,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
         email_notify: emailNotify,
         target_mode: targetMode,
         target_ids: selectedTargets,
+        target_status_filter: statusFilter,
       };
 
       if (rule) {
@@ -442,13 +449,21 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
             <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="Mô tả ngắn về rule này" />
           </div>
 
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-4 gap-3">
             <div>
               <label className="label">Phạm vi *</label>
               <select value={scope} onChange={(e) => setScope(e.target.value)} className="input">
                 <option value="campaign">Chiến dịch</option>
                 <option value="ad_group">Nhóm quảng cáo</option>
                 <option value="ad">Quảng cáo</option>
+              </select>
+            </div>
+            <div>
+              <label className="label">Trạng thái áp dụng</label>
+              <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="input">
+                <option value="all">Tất cả</option>
+                <option value="active">Đang chạy</option>
+                <option value="paused">Đã tắt</option>
               </select>
             </div>
             <div>

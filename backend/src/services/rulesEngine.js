@@ -366,6 +366,18 @@ const executeRule = async (rule, options = {}) => {
         }
       }
 
+      // Lọc theo trạng thái chiến dịch
+      if (rule.target_status_filter && rule.target_status_filter !== 'all') {
+        const ACTIVE_STATUSES = ['ENABLED', 'ACTIVE', 'ENABLE'];
+        const PAUSED_STATUSES = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'];
+        targets = targets.filter(t => {
+          const s = (t.status || '').toUpperCase();
+          if (rule.target_status_filter === 'active') return ACTIVE_STATUSES.includes(s);
+          if (rule.target_status_filter === 'paused') return PAUSED_STATUSES.includes(s);
+          return true;
+        });
+      }
+
       for (const target of targets) {
         // --- Cooldown per-target (bypass khi chạy thủ công) ---
         if (!bypassCooldown) {
