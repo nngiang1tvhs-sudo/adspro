@@ -44,19 +44,6 @@ const OPERATORS = {
 const getMetricValue = async (object, metric, timeRange, account) => {
   if (metric === 'time') return null;
 
-  const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
-  let fromDate;
-
-  switch (timeRange) {
-    case 'today': fromDate = today; break;
-    case '3d': fromDate = dayjs().subtract(2, 'day').format('YYYY-MM-DD'); break;
-    case '5d': fromDate = dayjs().subtract(4, 'day').format('YYYY-MM-DD'); break;
-    case '7d': fromDate = dayjs().subtract(6, 'day').format('YYYY-MM-DD'); break;
-    case 'all': fromDate = '2000-01-01'; break;
-    default: fromDate = today;
-  }
-
-  // Map metric name sang column trong daily_metrics
   const colMap = {
     spend: 'spend', impressions: 'impressions', clicks: 'clicks',
     ctr: 'ctr', cpc: 'cpc', cpm: 'cpm', conversions: 'conversions',
@@ -68,7 +55,44 @@ const getMetricValue = async (object, metric, timeRange, account) => {
   const column = colMap[metric];
   if (!column) return null;
 
-  // Tổng/trung bình theo metric
+  // "Hôm nay" → dùng campaigns.metrics (real-time từ lần sync gần nhất)
+  // vì daily_metrics chỉ có dữ liệu ngày hôm qua trở về trước
+  if (timeRange === 'today' || !timeRange) {
+    const rawMetrics = object.metrics;
+    if (rawMetrics) {
+      const m = typeof rawMetrics === 'string' ? JSON.parse(rawMetrics) : rawMetrics;
+      const val = m[metric] ?? m[column];
+      if (val !== undefined && val !== null) return Number(val);
+    }
+    // Fallback: vẫn query daily_metrics nếu campaigns.metrics không có field này
+    const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+    let sql, params;
+    if (object.type === 'campaign') {
+      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE campaign_id = $1 AND date = $2`;
+      params = [object.id, today];
+    } else if (object.type === 'ad_group') {
+      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_group_id = $1 AND date = $2`;
+      params = [object.id, today];
+    } else if (object.type === 'ad') {
+      sql = `SELECT SUM(${column}) as val FROM daily_metrics WHERE ad_id = $1 AND date = $2`;
+      params = [object.id, today];
+    } else {
+      return 0;
+    }
+    const result = await query(sql, params);
+    return Number(result.rows[0]?.val || 0);
+  }
+
+  const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
+  let fromDate;
+  switch (timeRange) {
+    case '3d': fromDate = dayjs().subtract(2, 'day').format('YYYY-MM-DD'); break;
+    case '5d': fromDate = dayjs().subtract(4, 'day').format('YYYY-MM-DD'); break;
+    case '7d': fromDate = dayjs().subtract(6, 'day').format('YYYY-MM-DD'); break;
+    case 'all': fromDate = '2000-01-01'; break;
+    default: fromDate = today;
+  }
+
   const aggregator = ['ctr', 'cpc', 'cpm', 'cpa', 'cpv', 'roas'].includes(metric) ? 'AVG' : 'SUM';
 
   let sql, params;
