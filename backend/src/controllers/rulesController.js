@@ -226,7 +226,8 @@ const runRule = asyncHandler(async (req, res) => {
     return error(res, 'Không tìm thấy rule', 404);
   }
 
-  const execResult = await executeRule(result.rows[0]);
+  // Chạy thủ công: bypass cooldown để luôn đánh giá điều kiện thực tế
+  const execResult = await executeRule(result.rows[0], { bypassCooldown: true });
 
   await logEvent({
     userId: req.user.id,

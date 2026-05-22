@@ -39,9 +39,20 @@ const OPERATORS = {
 };
 
 /**
- * Lấy giá trị metric của 1 đối tượng (campaign/adgroup/ad) cho khoảng thời gian
+ * Lấy giá trị metric của 1 đối tượng cho khoảng thời gian.
+ *
+ * Thứ tự ưu tiên cho "Hôm nay":
+ *   1. liveMetrics (gọi trực tiếp từ API — chính xác nhất)
+ *   2. campaigns.metrics từ DB (sync gần nhất, có thể là 30 ngày)
+ *   3. daily_metrics hôm nay trong DB (fallback cuối)
+ *
+ * @param {object} object           - Campaign/AdGroup/Ad từ DB
+ * @param {string} metric           - Tên chỉ số cần lấy
+ * @param {string} timeRange        - today | 3d | 5d | 7d | all
+ * @param {object} account          - Thông tin tài khoản
+ * @param {object|null} liveMetrics - Metrics live từ API (null = dùng cache)
  */
-const getMetricValue = async (object, metric, timeRange, account) => {
+const getMetricValue = async (object, metric, timeRange, account, liveMetrics = null) => {
   if (metric === 'time') return null;
 
   const colMap = {
@@ -55,16 +66,22 @@ const getMetricValue = async (object, metric, timeRange, account) => {
   const column = colMap[metric];
   if (!column) return null;
 
-  // "Hôm nay" → dùng campaigns.metrics (real-time từ lần sync gần nhất)
-  // vì daily_metrics chỉ có dữ liệu ngày hôm qua trở về trước
   if (timeRange === 'today' || !timeRange) {
+    // Ưu tiên 1: Live metrics từ API (chính xác nhất)
+    if (liveMetrics !== null) {
+      const val = liveMetrics[metric] ?? liveMetrics[column];
+      return Number(val || 0);
+    }
+
+    // Ưu tiên 2: campaigns.metrics từ lần sync gần nhất
     const rawMetrics = object.metrics;
     if (rawMetrics) {
       const m = typeof rawMetrics === 'string' ? JSON.parse(rawMetrics) : rawMetrics;
       const val = m[metric] ?? m[column];
       if (val !== undefined && val !== null) return Number(val);
     }
-    // Fallback: vẫn query daily_metrics nếu campaigns.metrics không có field này
+
+    // Ưu tiên 3: daily_metrics hôm nay trong DB
     const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
     let sql, params;
     if (object.type === 'campaign') {
@@ -83,6 +100,7 @@ const getMetricValue = async (object, metric, timeRange, account) => {
     return Number(result.rows[0]?.val || 0);
   }
 
+  // Khoảng thời gian lịch sử (3d, 5d, 7d, all) — đọc từ daily_metrics
   const today = dayjs().tz('Asia/Ho_Chi_Minh').format('YYYY-MM-DD');
   let fromDate;
   switch (timeRange) {
@@ -124,8 +142,9 @@ const STRING_OPS = {
 
 /**
  * Đánh giá 1 condition
+ * @param {object|null} liveMetrics - Metrics live từ API cho target này
  */
-const evaluateCondition = async (condition, object, account) => {
+const evaluateCondition = async (condition, object, account, liveMetrics = null) => {
   if (condition.metric === 'time') {
     const now = dayjs().tz('Asia/Ho_Chi_Minh');
     const currentMinutes = now.hour() * 60 + now.minute();
@@ -145,7 +164,7 @@ const evaluateCondition = async (condition, object, account) => {
     return { passed: nameOp(objectName, condValue), actualValue: null };
   }
 
-  const value = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account);
+  const value = await getMetricValue(object, condition.metric, condition.timeRange || 'today', account, liveMetrics);
   if (value === null) return { passed: false, actualValue: null };
 
   const op = OPERATORS[condition.operator];
@@ -156,13 +175,14 @@ const evaluateCondition = async (condition, object, account) => {
 
 /**
  * Đánh giá tất cả conditions
+ * @param {object|null} liveMetrics - Metrics live từ API cho target này
  */
-const evaluateAllConditions = async (conditions, logic, object, account) => {
+const evaluateAllConditions = async (conditions, logic, object, account, liveMetrics = null) => {
   if (!conditions || conditions.length === 0) return false;
 
   const results = [];
   for (const cond of conditions) {
-    const r = await evaluateCondition(cond, object, account);
+    const r = await evaluateCondition(cond, object, account, liveMetrics);
     results.push({ condition: cond, result: r.passed, actualValue: r.actualValue });
   }
 
@@ -260,8 +280,13 @@ const isTargetInCooldown = async (ruleId, targetExternalId, cooldownMinutes) => 
 
 /**
  * Thực thi 1 rule
+ *
+ * @param {object} rule                  - Rule từ DB
+ * @param {object} options
+ * @param {boolean} options.bypassCooldown - Bỏ qua cooldown (dùng khi chạy thủ công)
  */
-const executeRule = async (rule) => {
+const executeRule = async (rule, options = {}) => {
+  const { bypassCooldown = false } = options;
   const startTime = Date.now();
 
   try {
@@ -291,8 +316,22 @@ const executeRule = async (rule) => {
     }
 
     const allResults = [];
+    let totalCooldownSkipped = 0;
 
     for (const account of accounts.rows) {
+      // --- Tải live metrics từ API nếu có điều kiện "Hôm nay" ---
+      let liveMetricsMap = {};
+      const hasTodayCondition = (rule.conditions || []).some(c => !c.timeRange || c.timeRange === 'today');
+      if (hasTodayCondition) {
+        try {
+          const svc = getService(account.platform);
+          liveMetricsMap = await svc.getLiveMetrics(account.credentials, rule.scope);
+          logger.info(`Rule ${rule.id}: Đã tải live metrics cho ${Object.keys(liveMetricsMap).length} campaigns (${account.account_name})`);
+        } catch (err) {
+          logger.warn(`Rule ${rule.id}: Không thể tải live metrics, dùng cache DB: ${err.message}`);
+        }
+      }
+
       // Lấy targets theo scope
       let targets = [];
       if (rule.scope === 'campaign') {
@@ -328,19 +367,28 @@ const executeRule = async (rule) => {
       }
 
       for (const target of targets) {
-        // --- Cooldown per-target: mỗi campaign có cooldown độc lập ---
-        const inCooldown = await isTargetInCooldown(rule.id, target.external_id, rule.cooldown_minutes);
-        if (inCooldown) {
-          logger.debug(`Rule ${rule.id} - "${target.name}" đang trong cooldown, bỏ qua`);
-          continue;
+        // --- Cooldown per-target (bypass khi chạy thủ công) ---
+        if (!bypassCooldown) {
+          const inCooldown = await isTargetInCooldown(rule.id, target.external_id, rule.cooldown_minutes);
+          if (inCooldown) {
+            totalCooldownSkipped++;
+            logger.debug(`Rule ${rule.id} - "${target.name}" đang trong cooldown, bỏ qua`);
+            continue;
+          }
         }
 
-        // Đánh giá conditions
+        // Lấy live metrics cho target cụ thể này
+        const targetLiveMetrics = Object.keys(liveMetricsMap).length > 0
+          ? (liveMetricsMap[target.external_id] || null)
+          : null;
+
+        // Đánh giá conditions với live metrics
         const evalResult = await evaluateAllConditions(
           rule.conditions,
           rule.conditions_logic || 'AND',
           target,
-          account
+          account,
+          targetLiveMetrics
         );
 
         if (!evalResult.passed) continue;
@@ -380,7 +428,7 @@ const executeRule = async (rule) => {
           ]
         );
 
-        // Cập nhật thống kê rule (chỉ mang tính thống kê, không dùng cho cooldown)
+        // Cập nhật thống kê rule
         await query(
           'UPDATE rules SET last_triggered_at = CURRENT_TIMESTAMP, total_triggers = total_triggers + 1 WHERE id = $1',
           [rule.id]
@@ -403,6 +451,7 @@ const executeRule = async (rule) => {
       success: true,
       duration: Date.now() - startTime,
       triggered: allResults.length,
+      cooldown_skipped: totalCooldownSkipped,
       results: allResults,
     };
 
