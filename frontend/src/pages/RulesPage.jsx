@@ -137,9 +137,9 @@ export default function RulesPage() {
       if (!result.success) {
         toast.error(result.message || 'Rule không thể chạy', { id: t });
       } else if (result.triggered > 0) {
-        toast.success(`Rule đã trigger ${result.triggered} đối tượng`, { id: t });
+        toast.success(`Rule trigger ${result.triggered} đối tượng (đọc dữ liệu live từ API)`, { id: t });
       } else {
-        toast(`Rule đã chạy. Không có đối tượng nào thỏa điều kiện (triggered: 0)`, {
+        toast(`Không có đối tượng nào thỏa điều kiện (dữ liệu live từ API)`, {
           id: t, icon: 'ℹ️',
         });
       }

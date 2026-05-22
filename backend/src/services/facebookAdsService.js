@@ -343,6 +343,24 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
   }
 };
 
+/**
+ * Lấy metrics LIVE từ API cho ngày hôm nay (giờ Việt Nam UTC+7)
+ * scope: 'campaign' | 'ad_group' | 'ad'
+ */
+const getLiveMetrics = async (credentials, scope = 'campaign') => {
+  if (scope !== 'campaign') return {};
+  try {
+    const vnToday = new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const campaigns = await getCampaigns(credentials, { from: vnToday, to: vnToday });
+    const map = {};
+    for (const c of campaigns) map[c.external_id] = c.metrics;
+    return map;
+  } catch (err) {
+    logger.error('Facebook getLiveMetrics error:', err.message);
+    return {};
+  }
+};
+
 module.exports = {
   testConnection,
   getAccessibleAdAccounts,
@@ -352,5 +370,6 @@ module.exports = {
   getAds,
   toggleCampaignStatus,
   getDailyMetrics,
+  getLiveMetrics,
   mapFacebookObjective,
 };
