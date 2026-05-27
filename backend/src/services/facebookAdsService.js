@@ -163,48 +163,96 @@ const parseActions = (actions) => {
   return map;
 };
 
-// Tính kết quả theo objective/optimization_goal của Facebook
-const computeFbResult = (objectiveOrGoal, actions, insights) => {
-  const obj = (objectiveOrGoal || '').toUpperCase();
+// Tính kết quả theo optimization_goal (adset) hoặc objective (campaign) của Facebook
+// Dùng exact match theo giá trị thực Facebook API trả về
+const computeFbResult = (optimizationGoalOrObjective, actions, insights) => {
   const spend = Number(insights.spend || 0);
   let result = 0;
 
-  if (obj.includes('TRAFFIC') || obj.includes('LINK') || obj === 'CLICKS') {
-    result = actions.link_click || Number(insights.inline_link_clicks || 0);
-    const cpr = Number(insights.cost_per_inline_link_click || 0) || (result > 0 ? spend / result : 0);
-    return { result, cost_per_result: cpr };
+  switch (optimizationGoalOrObjective) {
+    // --- Adset optimization_goal ---
+    case 'LINK_CLICKS':
+    case 'LANDING_PAGE_VIEWS':
+      result = Number(insights.inline_link_clicks || actions.link_click || 0);
+      return { result, cost_per_result: Number(insights.cost_per_inline_link_click || 0) || (result > 0 ? spend / result : 0) };
+
+    case 'OFFSITE_CONVERSIONS':
+    case 'CONVERSIONS':
+      result = Number(insights.conversions || 0);
+      return { result, cost_per_result: Number(insights.cost_per_conversion || 0) };
+
+    case 'QUALITY_LEAD':
+    case 'LEAD_GENERATION':
+      result = actions['leadgen.other'] || actions.lead || Number(insights.conversions || 0);
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'REPLIES':
+    case 'CONVERSATIONS':
+      result = actions['onsite_conversion.messaging_first_reply'] || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'POST_ENGAGEMENT':
+      result = actions.post_engagement || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'THRUPLAY':
+      result = actions.video_thruplay_watched || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'VIDEO_VIEWS':
+      result = actions.video_view || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'PAGE_LIKES':
+      result = actions.like || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'APP_INSTALLS':
+      result = actions.mobile_app_install || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'REACH':
+      result = Number(insights.reach || 0);
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    // --- Campaign objective (broad, dùng khi không có optimization_goal) ---
+    case 'OUTCOME_TRAFFIC':
+      result = Number(insights.inline_link_clicks || 0);
+      return { result, cost_per_result: Number(insights.cost_per_inline_link_click || 0) };
+
+    case 'OUTCOME_SALES':
+      result = Number(insights.conversions || 0);
+      return { result, cost_per_result: Number(insights.cost_per_conversion || 0) };
+
+    case 'OUTCOME_LEADS':
+      result = actions['leadgen.other'] || actions.lead || Number(insights.conversions || 0);
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'OUTCOME_ENGAGEMENT':
+      result = actions.post_engagement || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'OUTCOME_AWARENESS':
+      result = Number(insights.reach || 0);
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'OUTCOME_APP_PROMOTION':
+      result = actions.mobile_app_install || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    // Legacy objectives
+    case 'MESSAGES':
+      result = actions['onsite_conversion.messaging_first_reply'] || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    case 'PAGE_ENGAGEMENT':
+      result = actions.post_engagement || 0;
+      return { result, cost_per_result: result > 0 ? spend / result : 0 };
+
+    default:
+      result = Number(insights.conversions || 0);
+      return { result, cost_per_result: Number(insights.cost_per_conversion || 0) };
   }
-  if (obj.includes('LEAD') || obj === 'LEAD_GENERATION') {
-    result = actions['leadgen.other'] || actions.lead || Number(insights.conversions || 0);
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  if (obj.includes('SALES') || obj === 'CONVERSIONS' || obj.includes('PURCHASE')) {
-    result = actions['offsite_conversion.fb_pixel_purchase'] || Number(insights.conversions || 0);
-    return { result, cost_per_result: result > 0 ? spend / result : Number(insights.cost_per_conversion || 0) };
-  }
-  if (obj.includes('MESSAGE')) {
-    result = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0;
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  if (obj.includes('VIDEO')) {
-    result = actions.video_view || 0;
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  if (obj.includes('ENGAGEMENT')) {
-    result = actions.post_engagement || 0;
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  if (obj.includes('AWARENESS') || obj === 'REACH') {
-    result = Number(insights.reach || 0);
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  if (obj.includes('LIKE') || obj === 'PAGE_LIKES') {
-    result = actions.like || 0;
-    return { result, cost_per_result: result > 0 ? spend / result : 0 };
-  }
-  // Fallback
-  result = Number(insights.conversions || 0);
-  return { result, cost_per_result: Number(insights.cost_per_conversion || 0) };
 };
 
 const getROAS = (insights) => {
@@ -249,7 +297,7 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
         'id', 'name', 'status', 'effective_status', 'campaign_id',
         'daily_budget', 'lifetime_budget', 'bid_amount', 'bid_strategy',
         'optimization_goal', 'targeting',
-        `insights.time_range(${timeRange}){spend,impressions,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions}`,
+        `insights.time_range(${timeRange}){spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,inline_link_clicks,cost_per_inline_link_click,actions}`,
       ].join(','),
       limit: 200,
     });
