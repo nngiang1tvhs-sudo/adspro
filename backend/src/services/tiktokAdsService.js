@@ -343,17 +343,75 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
       page_size: 200,
     });
 
-    return (data.list || []).map(ad => ({
-      external_id: ad.ad_id,
-      name: ad.ad_name,
-      status: ad.operation_status,
-      ad_type: ad.ad_format,
-      video_url: ad.video_id ? `https://www.tiktok.com/video/${ad.video_id}` : null,
-      image_url: ad.image_ids?.[0] || null,
-      headline: ad.ad_text,
-      landing_url: ad.landing_page_url,
-      raw_data: ad,
-    }));
+    const ads = data.list || [];
+    if (ads.length === 0) return [];
+
+    // Lấy insights cho các ads
+    const today = new Date();
+    const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = dateRange.to || today.toISOString().split('T')[0];
+
+    const adIds = ads.map(ad => ad.ad_id);
+    let insightsMap = {};
+
+    try {
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, {
+        advertiser_id: decrypted.advertiser_id,
+        report_type: 'BASIC',
+        data_level: 'AUCTION_AD',
+        dimensions: JSON.stringify(['ad_id']),
+        metrics: JSON.stringify([
+          'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'frequency',
+          'conversion', 'conversion_rate', 'cost_per_conversion',
+          'video_play_actions', 'result', 'cost_per_result', 'result_rate',
+        ]),
+        start_date: startDate,
+        end_date: endDate,
+        page_size: 200,
+        filters: JSON.stringify([{
+          field_name: 'ad_ids',
+          filter_type: 'IN',
+          filter_value: JSON.stringify(adIds),
+        }]),
+      });
+      (insightsData.list || []).forEach(item => {
+        insightsMap[item.dimensions.ad_id] = item.metrics;
+      });
+    } catch (insightErr) {
+      logger.warn('TikTok ad insights warning:', insightErr.message);
+    }
+
+    return ads.map(ad => {
+      const m = insightsMap[ad.ad_id] || {};
+      return {
+        external_id: ad.ad_id,
+        name: ad.ad_name,
+        status: ad.operation_status,
+        ad_type: ad.ad_format,
+        video_url: ad.video_id ? `https://www.tiktok.com/video/${ad.video_id}` : null,
+        image_url: ad.image_ids?.[0] || null,
+        headline: ad.ad_text,
+        landing_url: ad.landing_page_url,
+        metrics: {
+          spend: Number(m.spend || 0),
+          impressions: Number(m.impressions || 0),
+          clicks: Number(m.clicks || 0),
+          ctr: Number(m.ctr || 0),
+          cpc: Number(m.cpc || 0),
+          cpm: Number(m.cpm || 0),
+          reach: Number(m.reach || 0),
+          frequency: Number(m.frequency || 0),
+          conversions: Number(m.conversion || 0),
+          conversion_rate: Number(m.conversion_rate || 0),
+          cpa: Number(m.cost_per_conversion || 0),
+          video_views: Number(m.video_play_actions || 0),
+          result: Number(m.result || 0),
+          cost_per_result: Number(m.cost_per_result || 0),
+          result_rate: Number(m.result_rate || 0),
+        },
+        raw_data: ad,
+      };
+    });
   } catch (err) {
     logger.error('TikTok getAds error:', err.message);
     throw new Error(`Lỗi lấy quảng cáo: ${err.message}`);
