@@ -114,22 +114,29 @@ const listAdGroups = asyncHandler(async (req, res) => {
 
   let campaignExternalId, credentials, platform, campaignName;
 
-  // Thử tìm trong DB trước
-  const campResult = await query(
-    `SELECT c.external_id, c.name, a.platform, a.credentials, a.account_name
-     FROM campaigns c
-     JOIN ad_accounts a ON c.account_id = a.id
-     WHERE c.id = $1 AND a.user_id = $2`,
-    [id, req.user.id]
-  );
+  // Thử tìm trong DB trước (chỉ khi id là integer hợp lệ trong range PostgreSQL)
+  const numId = Number(id);
+  const isDbId = Number.isInteger(numId) && numId > 0 && numId <= 2147483647;
 
-  if (campResult.rowCount > 0) {
-    const row = campResult.rows[0];
-    campaignExternalId = row.external_id;
-    credentials = row.credentials;
-    platform = row.platform;
-    campaignName = row.name;
-  } else {
+  if (isDbId) {
+    const campResult = await query(
+      `SELECT c.external_id, c.name, a.platform, a.credentials, a.account_name
+       FROM campaigns c
+       JOIN ad_accounts a ON c.account_id = a.id
+       WHERE c.id = $1 AND a.user_id = $2`,
+      [id, req.user.id]
+    );
+
+    if (campResult.rowCount > 0) {
+      const row = campResult.rows[0];
+      campaignExternalId = row.external_id;
+      credentials = row.credentials;
+      platform = row.platform;
+      campaignName = row.name;
+    }
+  }
+
+  if (!campaignExternalId) {
     // Fallback: campaign chưa sync vào DB → dùng external_id + account_id từ query
     const resolvedExternalId = external_id || id;
     if (!account_id) {
