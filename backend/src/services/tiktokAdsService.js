@@ -255,17 +255,75 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
       page_size: 200,
     });
 
-    return (data.list || []).map(ag => ({
-      external_id: ag.adgroup_id,
-      campaign_external_id: ag.campaign_id,
-      name: ag.adgroup_name,
-      status: ag.operation_status,
-      bid_type: ag.bid_type,
-      bid_amount: Number(ag.bid_price || 0),
-      target_cpa: Number(ag.conversion_bid_price || 0),
-      budget: Number(ag.budget || 0),
-      raw_data: ag,
-    }));
+    const adGroups = data.list || [];
+    if (adGroups.length === 0) return [];
+
+    // Lấy insights cho các ad groups
+    const today = new Date();
+    const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = dateRange.to || today.toISOString().split('T')[0];
+
+    const adGroupIds = adGroups.map(ag => ag.adgroup_id);
+    let insightsMap = {};
+
+    try {
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, {
+        advertiser_id: decrypted.advertiser_id,
+        report_type: 'BASIC',
+        data_level: 'AUCTION_ADGROUP',
+        dimensions: JSON.stringify(['adgroup_id']),
+        metrics: JSON.stringify([
+          'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'frequency',
+          'conversion', 'conversion_rate', 'cost_per_conversion',
+          'video_play_actions', 'result', 'cost_per_result', 'result_rate',
+        ]),
+        start_date: startDate,
+        end_date: endDate,
+        page_size: 200,
+        filters: JSON.stringify([{
+          field_name: 'adgroup_ids',
+          filter_type: 'IN',
+          filter_value: JSON.stringify(adGroupIds),
+        }]),
+      });
+      (insightsData.list || []).forEach(item => {
+        insightsMap[item.dimensions.adgroup_id] = item.metrics;
+      });
+    } catch (insightErr) {
+      logger.warn('TikTok adgroup insights warning:', insightErr.message);
+    }
+
+    return adGroups.map(ag => {
+      const m = insightsMap[ag.adgroup_id] || {};
+      return {
+        external_id: ag.adgroup_id,
+        campaign_external_id: ag.campaign_id,
+        name: ag.adgroup_name,
+        status: ag.operation_status,
+        bid_type: ag.bid_type,
+        bid_amount: Number(ag.bid_price || 0),
+        target_cpa: Number(ag.conversion_bid_price || 0),
+        budget: Number(ag.budget || 0),
+        metrics: {
+          spend: Number(m.spend || 0),
+          impressions: Number(m.impressions || 0),
+          clicks: Number(m.clicks || 0),
+          ctr: Number(m.ctr || 0),
+          cpc: Number(m.cpc || 0),
+          cpm: Number(m.cpm || 0),
+          reach: Number(m.reach || 0),
+          frequency: Number(m.frequency || 0),
+          conversions: Number(m.conversion || 0),
+          conversion_rate: Number(m.conversion_rate || 0),
+          cpa: Number(m.cost_per_conversion || 0),
+          video_views: Number(m.video_play_actions || 0),
+          result: Number(m.result || 0),
+          cost_per_result: Number(m.cost_per_result || 0),
+          result_rate: Number(m.result_rate || 0),
+        },
+        raw_data: ag,
+      };
+    });
   } catch (err) {
     logger.error('TikTok getAdGroups error:', err.message);
     throw new Error(`Lỗi lấy nhóm quảng cáo: ${err.message}`);
