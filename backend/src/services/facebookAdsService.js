@@ -110,6 +110,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
     return (data.data || []).map(camp => {
       const insights = camp.insights?.data?.[0] || {};
       const actions = parseActions(insights.actions || []);
+      const fbResult = computeFbResult(camp.objective, actions, insights);
       return {
         external_id: camp.id,
         name: camp.name,
@@ -133,15 +134,15 @@ const getCampaigns = async (credentials, dateRange = {}) => {
           ctr: Number(insights.ctr || 0),
           cpc: Number(insights.cpc || 0),
           cpm: Number(insights.cpm || 0),
-          conversions: Number(insights.conversions || 0),
-          cpa: Number(insights.cost_per_conversion || 0),
+          conversions: fbResult.result,
+          cpa: fbResult.cost_per_result,
           inline_link_clicks: Number(insights.inline_link_clicks || 0),
           cost_per_inline_link_click: Number(insights.cost_per_inline_link_click || 0),
           messages: actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
           video_2s_views: actions.video_view || 0,
-          purchases: actions.purchase || 0,
+          purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
           quality_ranking: insights.quality_ranking,
           engagement_ranking: insights.engagement_rate_ranking,
@@ -160,6 +161,50 @@ const parseActions = (actions) => {
   const map = {};
   for (const action of actions) map[action.action_type] = Number(action.value);
   return map;
+};
+
+// Tính kết quả theo objective/optimization_goal của Facebook
+const computeFbResult = (objectiveOrGoal, actions, insights) => {
+  const obj = (objectiveOrGoal || '').toUpperCase();
+  const spend = Number(insights.spend || 0);
+  let result = 0;
+
+  if (obj.includes('TRAFFIC') || obj.includes('LINK') || obj === 'CLICKS') {
+    result = actions.link_click || Number(insights.inline_link_clicks || 0);
+    const cpr = Number(insights.cost_per_inline_link_click || 0) || (result > 0 ? spend / result : 0);
+    return { result, cost_per_result: cpr };
+  }
+  if (obj.includes('LEAD') || obj === 'LEAD_GENERATION') {
+    result = actions['leadgen.other'] || actions.lead || Number(insights.conversions || 0);
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  if (obj.includes('SALES') || obj === 'CONVERSIONS' || obj.includes('PURCHASE')) {
+    result = actions['offsite_conversion.fb_pixel_purchase'] || Number(insights.conversions || 0);
+    return { result, cost_per_result: result > 0 ? spend / result : Number(insights.cost_per_conversion || 0) };
+  }
+  if (obj.includes('MESSAGE')) {
+    result = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0;
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  if (obj.includes('VIDEO')) {
+    result = actions.video_view || 0;
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  if (obj.includes('ENGAGEMENT')) {
+    result = actions.post_engagement || 0;
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  if (obj.includes('AWARENESS') || obj === 'REACH') {
+    result = Number(insights.reach || 0);
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  if (obj.includes('LIKE') || obj === 'PAGE_LIKES') {
+    result = actions.like || 0;
+    return { result, cost_per_result: result > 0 ? spend / result : 0 };
+  }
+  // Fallback
+  result = Number(insights.conversions || 0);
+  return { result, cost_per_result: Number(insights.cost_per_conversion || 0) };
 };
 
 const getROAS = (insights) => {
@@ -211,6 +256,8 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
 
     return (data.data || []).map(adset => {
       const insights = adset.insights?.data?.[0] || {};
+      const actions = parseActions(insights.actions || []);
+      const fbResult = computeFbResult(adset.optimization_goal, actions, insights);
       return {
         external_id: adset.id,
         campaign_external_id: adset.campaign_id,
@@ -228,8 +275,8 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
           ctr: Number(insights.ctr || 0),
           cpc: Number(insights.cpc || 0),
           cpm: Number(insights.cpm || 0),
-          conversions: Number(insights.conversions || 0),
-          cpa: Number(insights.cost_per_conversion || 0),
+          conversions: fbResult.result,
+          cpa: fbResult.cost_per_result,
         },
         raw_data: adset,
       };
