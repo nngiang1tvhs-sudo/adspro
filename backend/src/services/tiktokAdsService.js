@@ -134,7 +134,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       page_size: 200,
       fields: JSON.stringify([
         'campaign_id', 'campaign_name', 'campaign_type', 'objective_type',
-        'status', 'operation_status', 'budget', 'budget_mode',
+        'operation_status', 'budget', 'budget_mode',
         'create_time', 'modify_time', 'roas_bid'
       ]),
     });
