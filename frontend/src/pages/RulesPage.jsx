@@ -74,13 +74,18 @@ const TIME_RANGES = [
   { key: 'all', label: 'Toàn thời gian' },
 ];
 
-const ACTION_TYPES = [
-  { key: 'enable', label: 'Bật chiến dịch', color: 'green' },
-  { key: 'pause', label: 'Tắt chiến dịch', color: 'red' },
-  { key: 'notify', label: 'Gửi thông báo email', color: 'blue' },
-  { key: 'warn_complete', label: 'Cảnh báo sắp hoàn thành', color: 'amber' },
-  { key: 'warn_threshold', label: 'Cảnh báo sắp vượt ngưỡng', color: 'orange' },
-];
+const SCOPE_LABELS = { campaign: 'chiến dịch', ad_group: 'nhóm quảng cáo', ad: 'quảng cáo' };
+
+const getActionTypes = (scope) => {
+  const obj = SCOPE_LABELS[scope] || 'chiến dịch';
+  return [
+    { key: 'enable', label: `Bật ${obj}`, color: 'green' },
+    { key: 'pause', label: `Tắt ${obj}`, color: 'red' },
+    { key: 'notify', label: 'Gửi thông báo email', color: 'blue' },
+    { key: 'warn_complete', label: 'Cảnh báo sắp hoàn thành', color: 'amber' },
+    { key: 'warn_threshold', label: 'Cảnh báo sắp vượt ngưỡng', color: 'orange' },
+  ];
+};
 
 export default function RulesPage() {
   const [platform, setPlatform] = useState('google');
@@ -375,7 +380,7 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] uppercase text-slate-500 font-medium tracking-wide mr-1">Hành động:</span>
         {actions.map((a, i) => {
-          const at = ACTION_TYPES.find(t => t.key === a.type);
+          const at = getActionTypes(rule.scope).find(t => t.key === a.type);
           const colorClass = {
             green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
             red: 'bg-red-50 text-red-700 border-red-200',
@@ -699,7 +704,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
           <div>
             <label className="label">Hành động *</label>
             <div className="grid grid-cols-2 gap-2">
-              {ACTION_TYPES.map(at => {
+              {getActionTypes(scope).map(at => {
                 const isSelected = action === at.key;
                 const colorClass = {
                   green: isSelected ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-white border-slate-200 text-slate-600',
