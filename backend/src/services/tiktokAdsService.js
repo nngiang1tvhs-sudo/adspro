@@ -535,7 +535,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     return {};
   }
 };
- */
+
 const getDailyMetrics = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
