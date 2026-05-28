@@ -85,6 +85,18 @@ const testConnection = async (credentials) => {
   }
 };
 
+const fmtD = (d) => d.toISOString().split('T')[0];
+
+const buildInsightsTimeParam = (dateRange) => {
+  if (dateRange.from === 'ALL_TIME') return 'date_preset(maximum)';
+  const today = new Date();
+  const last30 = new Date(today);
+  last30.setDate(today.getDate() - 30);
+  const since = (dateRange.from && dateRange.from !== 'ALL_TIME') ? dateRange.from : fmtD(last30);
+  const until = (dateRange.to && dateRange.to !== 'ALL_TIME') ? dateRange.to : fmtD(today);
+  return `time_range(${JSON.stringify({ since, until })})`;
+};
+
 const getCampaigns = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -92,17 +104,14 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       ? decrypted.ad_account_id
       : `act_${decrypted.ad_account_id}`;
 
-    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
-    if (dateRange.from && dateRange.to) {
-      timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
-    }
+    const insightsTimeParam = buildInsightsTimeParam(dateRange);
 
     const data = await apiCall(`/${adAccountId}/campaigns`, decrypted.access_token, {
       fields: [
         'id', 'name', 'status', 'effective_status', 'objective', 'buying_type',
         'daily_budget', 'lifetime_budget', 'budget_remaining', 'bid_strategy',
         'created_time', 'updated_time', 'start_time', 'stop_time',
-        `insights.time_range(${timeRange}){spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,inline_link_clicks,cost_per_inline_link_click,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,purchase_roas,website_purchase_roas,mobile_app_purchase_roas}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,inline_link_clicks,cost_per_inline_link_click,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,purchase_roas,website_purchase_roas,mobile_app_purchase_roas}`,
       ].join(','),
       limit: 200,
     });
@@ -287,17 +296,14 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
-    if (dateRange.from && dateRange.to) {
-      timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
-    }
+    const insightsTimeParam = buildInsightsTimeParam(dateRange);
 
     const data = await apiCall(`/${campaignExternalId}/adsets`, decrypted.access_token, {
       fields: [
         'id', 'name', 'status', 'effective_status', 'campaign_id',
         'daily_budget', 'lifetime_budget', 'bid_amount', 'bid_strategy',
         'optimization_goal', 'targeting',
-        `insights.time_range(${timeRange}){spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,inline_link_clicks,cost_per_inline_link_click,actions}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,inline_link_clicks,cost_per_inline_link_click,actions}`,
       ].join(','),
       limit: 200,
     });
@@ -339,22 +345,20 @@ const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    const today = new Date(); const last30 = new Date(today); last30.setDate(today.getDate() - 30); const fmtD = (d) => d.toISOString().split('T')[0]; let timeRange = JSON.stringify({ since: fmtD(last30), until: fmtD(today) });
-    if (dateRange.from && dateRange.to) {
-      timeRange = JSON.stringify({ since: dateRange.from, until: dateRange.to });
-    }
+    const insightsTimeParam = buildInsightsTimeParam(dateRange);
 
     const data = await apiCall(`/${adsetExternalId}/ads`, decrypted.access_token, {
       fields: [
         'id', 'name', 'status', 'effective_status',
         'creative{thumbnail_url,video_id,image_url,title,body,call_to_action_type}',
-        `insights.time_range(${timeRange}){spend,impressions,clicks,ctr,cpc}`,
+        `insights.${insightsTimeParam}{spend,impressions,clicks,ctr,cpc,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
       ].join(','),
       limit: 200,
     });
 
     return (data.data || []).map(ad => {
       const insights = ad.insights?.data?.[0] || {};
+      const actions = parseActions(insights.actions || []);
       return {
         external_id: ad.id,
         name: ad.name,
@@ -371,6 +375,8 @@ const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
           clicks: Number(insights.clicks || 0),
           ctr: Number(insights.ctr || 0),
           cpc: Number(insights.cpc || 0),
+          conversions: Number(insights.conversions || insights.inline_link_clicks || 0),
+          cpa: Number(insights.cost_per_conversion || insights.cost_per_inline_link_click || 0),
         },
         raw_data: ad,
       };

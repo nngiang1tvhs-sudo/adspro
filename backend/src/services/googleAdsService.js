@@ -81,7 +81,9 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
     const customer = getCustomer(credentials);
 
     let dateFilter = '';
-    if (dateRange.from && dateRange.to) {
+    if (dateRange.from === 'ALL_TIME') {
+      dateFilter = ''; // Không lọc ngày = toàn thời gian kể từ khi tạo chiến dịch
+    } else if (dateRange.from && dateRange.to) {
       dateFilter = `AND segments.date BETWEEN '${dateRange.from}' AND '${dateRange.to}'`;
     } else {
       dateFilter = `AND segments.date DURING LAST_30_DAYS`;
@@ -174,7 +176,9 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
     const customer = getCustomer(credentials);
 
     let dateFilter = `AND segments.date DURING LAST_30_DAYS`;
-    if (dateRange.from && dateRange.to) {
+    if (dateRange.from === 'ALL_TIME') {
+      dateFilter = '';
+    } else if (dateRange.from && dateRange.to) {
       dateFilter = `AND segments.date BETWEEN '${dateRange.from}' AND '${dateRange.to}'`;
     }
 
@@ -243,7 +247,9 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
     const customer = getCustomer(credentials);
 
     let dateFilter = `AND segments.date DURING LAST_30_DAYS`;
-    if (dateRange.from && dateRange.to) {
+    if (dateRange.from === 'ALL_TIME') {
+      dateFilter = '';
+    } else if (dateRange.from && dateRange.to) {
       dateFilter = `AND segments.date BETWEEN '${dateRange.from}' AND '${dateRange.to}'`;
     }
 
@@ -256,9 +262,13 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         ad_group_ad.status,
         metrics.impressions,
         metrics.clicks,
+        metrics.ctr,
+        metrics.average_cpc,
         metrics.cost_micros,
         metrics.video_views,
-        metrics.average_cpv
+        metrics.average_cpv,
+        metrics.conversions,
+        metrics.cost_per_conversion
       FROM ad_group_ad
       WHERE ad_group_ad.status != 'REMOVED'
         AND ad_group.id = ${adGroupExternalId}
@@ -276,9 +286,13 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
       metrics: {
         impressions: Number(row.metrics?.impressions || 0),
         clicks: Number(row.metrics?.clicks || 0),
+        ctr: Number(row.metrics?.ctr || 0),
+        cpc: row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
         spend: row.metrics?.cost_micros ? Number(row.metrics.cost_micros) / 1000000 : 0,
         video_views: Number(row.metrics?.video_views || 0),
         cpv: row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+        conversions: Number(row.metrics?.conversions || 0),
+        cpa: row.metrics?.cost_per_conversion ? Number(row.metrics.cost_per_conversion) / 1000000 : 0,
       },
       raw_data: row,
     }));

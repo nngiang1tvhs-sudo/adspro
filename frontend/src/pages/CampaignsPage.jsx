@@ -20,9 +20,9 @@ const DEFAULT_ADSET_COLUMNS = [
   { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
   { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
   { key: 'cpm', label: 'CPM', visible: true, format: 'currency' },
-  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency' },
-  { key: 'conversions', label: 'Ket qua', visible: true, format: 'number' },
-  { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency' },
+  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+  { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+  { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
 ];
 
 // Cot mac dinh cho Ads
@@ -34,7 +34,9 @@ const DEFAULT_AD_COLUMNS = [
   { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
   { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
   { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
-  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency' },
+  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+  { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+  { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
 ];
 
 // Sortable column header
@@ -232,7 +234,10 @@ export default function CampaignsPage() {
   const handleLoadPreset = (preset) => {
     try {
       const savedCols = typeof preset.columns === 'string' ? JSON.parse(preset.columns) : preset.columns;
-      setColumns(savedCols);
+      // Bảo đảm các cột cố định luôn hiển thị sau khi load preset
+      const pinnedKeys = new Set(DEFAULT_COLUMNS[platform].filter(c => c.pinned).map(c => c.key));
+      const finalCols = savedCols.map(c => pinnedKeys.has(c.key) ? { ...c, visible: true } : c);
+      setColumns(finalCols);
       setActivePreset(preset.id);
       toast.success('Da tai nhom cot: ' + preset.preset_name);
     } catch (err) {
@@ -287,15 +292,15 @@ export default function CampaignsPage() {
   };
 
   const toggleColumn = (key) => {
-    setColumns(columns.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
+    setColumns(columns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
   };
 
   const toggleAdsetColumn = (key) => {
-    setAdsetColumns(adsetColumns.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
+    setAdsetColumns(adsetColumns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
   };
 
   const toggleAdColumn = (key) => {
-    setAdColumns(adColumns.map(c => c.key === key ? { ...c, visible: !c.visible } : c));
+    setAdColumns(adColumns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
   };
 
   // === DRILL-DOWN FUNCTIONS ===
@@ -430,16 +435,22 @@ export default function CampaignsPage() {
       </div>
       <div className="grid grid-cols-3 gap-2 text-xs">
         {cols.map(col => (
-          <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+          <label key={col.key} className={`flex items-center gap-2 ${col.sticky || col.pinned ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
             <input
               type="checkbox"
               checked={col.visible}
               onChange={() => toggleFn(col.key)}
-              disabled={col.sticky}
+              disabled={col.sticky || col.pinned}
             />
-            {col.label}
+            <span className="flex items-center gap-1">
+              {col.label}
+              {col.pinned && <span className="text-blue-500 font-bold" title="Cot co dinh">•</span>}
+            </span>
           </label>
         ))}
+      </div>
+      <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+        <span className="text-blue-500 font-bold">•</span> Cột cố định, không thể ẩn
       </div>
     </div>
   );
@@ -576,16 +587,22 @@ export default function CampaignsPage() {
 
           <div className="grid grid-cols-3 gap-2 text-xs">
             {columns.map(col => (
-              <label key={col.key} className="flex items-center gap-2 cursor-pointer">
+              <label key={col.key} className={`flex items-center gap-2 ${col.sticky || col.pinned ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                 <input
                   type="checkbox"
                   checked={col.visible}
                   onChange={() => toggleColumn(col.key)}
-                  disabled={col.sticky}
+                  disabled={col.sticky || col.pinned}
                 />
-                {col.label}
+                <span className="flex items-center gap-1">
+                  {col.label}
+                  {col.pinned && <span className="text-blue-500 font-bold" title="Cot co dinh">•</span>}
+                </span>
               </label>
             ))}
+          </div>
+          <div className="mt-2 text-[10px] text-slate-400 flex items-center gap-1">
+            <span className="text-blue-500 font-bold">•</span> Cột cố định, không thể ẩn
           </div>
         </div>
       )}

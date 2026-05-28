@@ -20,8 +20,10 @@ export default function DateRangePicker({ value, onChange }) {
   const handlePreset = (preset) => {
     const range = preset.getValue();
     onChange(range);
-    setCustomFrom(range.from);
-    setCustomTo(range.to);
+    if (range.from !== 'ALL_TIME') {
+      setCustomFrom(range.from);
+      setCustomTo(range.to);
+    }
     setOpen(false);
   };
 
@@ -32,9 +34,11 @@ export default function DateRangePicker({ value, onChange }) {
     }
   };
 
-  const displayLabel = value?.from && value?.to
-    ? `${formatDate(value.from, 'DD/MM/YYYY')} — ${formatDate(value.to, 'DD/MM/YYYY')}`
-    : 'Chọn ngày';
+  const displayLabel = value?.from === 'ALL_TIME'
+    ? 'Toàn thời gian'
+    : (value?.from && value?.to
+      ? `${formatDate(value.from, 'DD/MM/YYYY')} — ${formatDate(value.to, 'DD/MM/YYYY')}`
+      : 'Chọn ngày');
 
   return (
     <div className="relative" ref={ref}>
