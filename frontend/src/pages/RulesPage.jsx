@@ -795,70 +795,69 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
 
   return (
     <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl flex flex-col" style={{ maxHeight: '80vh' }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl flex flex-col" style={{ maxHeight: '82vh' }}>
         {/* Header */}
-        <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="font-semibold text-slate-800">Chọn {scopeLabel}</h3>
-          <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded"><X size={18} /></button>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <div>
+            <h3 className="font-semibold text-slate-800">Chọn {scopeLabel}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{checked.size > 0 ? `Đã chọn ${checked.size} ${scopeLabel}` : `Chọn ${scopeLabel} để áp dụng rule`}</p>
+          </div>
+          <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"><X size={18} /></button>
         </div>
 
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 overflow-hidden">
           {/* Left: list */}
-          <div className="flex-1 border-r border-slate-100 flex flex-col min-h-0">
-            {/* Search */}
-            <div className="p-3 border-b border-slate-100">
-              <div className="relative">
-                <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <div className="flex-1 flex flex-col min-h-0 min-w-0">
+            {/* Search + count row */}
+            <div className="px-4 py-3 border-b border-slate-100 flex items-center gap-3 flex-shrink-0">
+              <div className="relative flex-1">
+                <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  placeholder={`Tìm kiếm theo tên ${scopeLabel}`}
-                  className="w-full pl-8 pr-3 py-1.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400"
+                  placeholder={`Tìm kiếm theo tên ${scopeLabel}...`}
+                  className="w-full pl-8 pr-3 py-1.5 text-sm border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400 bg-slate-50"
                 />
               </div>
-            </div>
-
-            {/* Count + select all */}
-            <div className="px-3 py-2 flex items-center justify-between border-b border-slate-50">
-              <span className="text-xs text-slate-500">
-                {loading ? 'Đang tải...' : `${filtered.length}/${items.length} ${scopeLabel}`}
+              <span className="text-xs text-slate-400 whitespace-nowrap flex-shrink-0">
+                {loading ? 'Đang tải...' : `${filtered.length}/${items.length}`}
               </span>
               {!loading && filtered.length > 0 && (
-                <button
-                  type="button"
-                  onClick={toggleAll}
-                  className="text-xs text-blue-600 hover:underline"
-                >
+                <button type="button" onClick={toggleAll} className="text-xs text-blue-600 hover:underline whitespace-nowrap flex-shrink-0">
                   {filtered.every(item => checked.has(item.id)) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
                 </button>
               )}
             </div>
 
             {/* List */}
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto divide-y divide-slate-100">
               {loading ? (
-                <div className="text-center py-8 text-slate-400 text-sm">Đang tải...</div>
+                <div className="text-center py-10 text-slate-400 text-sm">Đang tải...</div>
               ) : filtered.length === 0 ? (
-                <div className="text-center py-8 text-slate-400 text-sm">
+                <div className="text-center py-10 text-slate-400 text-sm px-6">
                   {items.length === 0 ? `Chưa có ${scopeLabel} nào trong DB. Hãy đồng bộ dữ liệu trước.` : 'Không tìm thấy kết quả'}
                 </div>
               ) : (
                 filtered.map(item => (
                   <label
                     key={item.id}
-                    className={`flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-slate-50 border-b border-slate-50 ${checked.has(item.id) ? 'bg-blue-50' : ''}`}
+                    className={`flex items-center gap-3 px-4 py-2.5 cursor-pointer transition-colors ${
+                      checked.has(item.id)
+                        ? 'bg-blue-50 border-l-2 border-blue-400'
+                        : 'hover:bg-slate-50 border-l-2 border-transparent'
+                    }`}
                   >
                     <input
                       type="checkbox"
                       checked={checked.has(item.id)}
                       onChange={() => toggle(item)}
-                      className="w-4 h-4 rounded text-blue-600"
+                      className="w-4 h-4 rounded accent-blue-600 flex-shrink-0"
                     />
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive(item.status) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
                     <div className="flex-1 min-w-0">
-                      <div className="text-xs font-medium text-slate-700 truncate">{item.name}</div>
+                      <div className="text-sm text-slate-700 truncate leading-snug">{item.name}</div>
                       {item.parent_name && (
-                        <div className="text-[10px] text-slate-400 truncate">{item.parent_name}</div>
+                        <div className="text-xs text-slate-400 truncate mt-0.5">{item.parent_name}</div>
                       )}
                     </div>
                   </label>
@@ -867,36 +866,48 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
             </div>
           </div>
 
-          {/* Right: selected */}
-          <div className="w-52 flex flex-col min-h-0">
-            <div className="p-3 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-xs font-medium text-slate-600">Đã chọn {selectedList.length} mục</span>
-              {selectedList.length > 0 && (
-                <button type="button" onClick={() => setChecked(new Map())} className="text-xs text-red-500 hover:underline">
+          {/* Divider */}
+          <div className="w-px bg-slate-100 flex-shrink-0" />
+
+          {/* Right: selected panel */}
+          <div className="w-56 flex flex-col min-h-0 flex-shrink-0 bg-slate-50">
+            <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
+              <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
+                Đã chọn ({checked.size})
+              </span>
+              {checked.size > 0 && (
+                <button type="button" onClick={() => setChecked(new Map())} className="text-xs text-red-500 hover:text-red-700">
                   Xoá tất cả
                 </button>
               )}
             </div>
             <div className="flex-1 overflow-y-auto">
-              {selectedList.map(t => (
-                <div key={t.id} className="flex items-center gap-2 px-3 py-2 border-b border-slate-50 group">
-                  <span className={`w-2 h-2 rounded-full flex-shrink-0 ${isActive(t.status) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
-                  <span className="flex-1 text-xs text-slate-700 truncate">{t.name}</span>
-                  <button type="button" onClick={() => toggle(t)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500">
-                    <X size={12} />
-                  </button>
-                </div>
-              ))}
+              {checked.size === 0 ? (
+                <div className="text-center py-8 px-3 text-xs text-slate-400">Chưa chọn mục nào</div>
+              ) : (
+                selectedList.map(t => (
+                  <div key={t.id} className="flex items-start gap-2 px-3 py-2.5 border-b border-slate-200 group hover:bg-white transition-colors">
+                    <span className={`w-2 h-2 rounded-full flex-shrink-0 mt-1 ${isActive(t.status) ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                    <span className="flex-1 text-xs text-slate-700 leading-relaxed line-clamp-2">{t.name}</span>
+                    <button type="button" onClick={() => toggle(t)} className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 flex-shrink-0 mt-0.5 transition-opacity">
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-slate-100 flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="btn btn-outline btn-sm">Hủy</button>
-          <button type="button" onClick={() => onSave(selectedList)} className="btn btn-primary btn-sm">
-            Xong ({selectedList.length} đã chọn)
-          </button>
+        <div className="px-5 py-3.5 border-t border-slate-100 flex items-center justify-between flex-shrink-0">
+          <span className="text-xs text-slate-400">{checked.size > 0 ? `${checked.size} ${scopeLabel} được chọn` : 'Chưa có lựa chọn nào'}</span>
+          <div className="flex gap-2">
+            <button type="button" onClick={onClose} className="btn btn-outline btn-sm">Hủy</button>
+            <button type="button" onClick={() => onSave(selectedList)} className="btn btn-primary btn-sm" disabled={checked.size === 0}>
+              Xong {checked.size > 0 ? `(${checked.size})` : ''}
+            </button>
+          </div>
         </div>
       </div>
     </div>
