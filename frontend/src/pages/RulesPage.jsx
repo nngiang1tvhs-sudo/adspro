@@ -71,7 +71,7 @@ const TIME_RANGES = [
   { key: '3d', label: '3 ngày' },
   { key: '5d', label: '5 ngày' },
   { key: '7d', label: '7 ngày' },
-  { key: 'all', label: 'Toàn thời gian' },
+  { key: 'all', label: '30 ngày' },
 ];
 
 const SCOPE_LABELS = { campaign: 'chiến dịch', ad_group: 'nhóm quảng cáo', ad: 'quảng cáo' };
@@ -114,8 +114,8 @@ export default function RulesPage() {
     }
   };
 
-  const loadRules = async () => {
-    setLoading(true);
+  const loadRules = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
       const res = await rulesApi.list({
         platform,
@@ -123,9 +123,9 @@ export default function RulesPage() {
       });
       setRules(res.data.rules);
     } catch (err) {
-      toast.error(err.message);
+      if (!silent) toast.error(err.message);
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   };
 
@@ -144,6 +144,12 @@ export default function RulesPage() {
     try {
       const res = await rulesApi.run(rule.id);
       const result = res.data;
+      // Cập nhật ngay lập tức số lần chạy mà không cần đợi reload
+      setRules(prev => prev.map(r =>
+        r.id === rule.id
+          ? { ...r, total_runs: (r.total_runs || 0) + 1, last_run_at: new Date().toISOString() }
+          : r
+      ));
       if (!result.success) {
         toast.error(result.message || 'Rule không thể chạy', { id: t });
       } else if (result.triggered > 0) {
@@ -154,9 +160,10 @@ export default function RulesPage() {
       if (result.debug?.length > 0) {
         setDebugResult({ ruleName: rule.name, ...result });
       }
-      await loadRules();
     } catch (err) {
       toast.error(err.message || 'Lỗi khi chạy rule', { id: t });
+    } finally {
+      await loadRules(true);
     }
   };
 
@@ -247,20 +254,33 @@ export default function RulesPage() {
                 Thời gian: <span className="font-semibold text-slate-800">{debugResult.duration}ms</span>
               </div>
               {debugResult.debug.map((d, i) => (
-                <div key={i} className={`border rounded-lg p-3 text-sm ${d.passed && !d.skipped ? 'border-emerald-300 bg-emerald-50' : d.skipped ? 'border-amber-300 bg-amber-50' : 'border-slate-200'}`}>
-                  <div className="flex items-center gap-2 mb-2">
+                <div key={i} className={`border rounded-lg p-3 text-sm ${
+                  d.noTargets ? 'border-orange-300 bg-orange-50'
+                  : d.passed && !d.skipped ? 'border-emerald-300 bg-emerald-50'
+                  : d.skipped ? 'border-amber-300 bg-amber-50'
+                  : 'border-slate-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="font-medium text-slate-800">{d.target}</span>
-                    <span className="text-xs text-slate-400">({d.status})</span>
-                    {d.passed && !d.skipped && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">✓ TRIGGER</span>}
-                    {d.skipped && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded">BỎ QUA: {d.skipped}</span>}
-                    {!d.passed && <span className="text-xs bg-slate-400 text-white px-2 py-0.5 rounded">✗ Không thỏa</span>}
-                    <span className="text-xs text-slate-400 ml-auto">Live API: {d.liveMetricsAvailable ? '✓' : '✗'}</span>
+                    {d.status && <span className="text-xs text-slate-400">({d.status})</span>}
+                    {d.noTargets && <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded">⚠ Không tìm thấy đối tượng</span>}
+                    {!d.noTargets && d.passed && !d.skipped && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">✓ TRIGGER</span>}
+                    {!d.noTargets && d.skipped && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded">BỎ QUA: {d.skipped}</span>}
+                    {!d.noTargets && !d.passed && <span className="text-xs bg-slate-400 text-white px-2 py-0.5 rounded">✗ Không thỏa</span>}
+                    {!d.noTargets && (
+                      <span className={`text-xs ml-auto ${d.liveMetricsAvailable ? 'text-emerald-600' : 'text-red-500'}`}>
+                        API data: {d.liveMetricsAvailable ? '✓ Có dữ liệu' : '✗ Không có dữ liệu hôm nay'}
+                      </span>
+                    )}
                   </div>
+                  {d.noTargets && d.noTargetsReason && (
+                    <div className="text-xs text-orange-700 bg-orange-100 rounded px-2 py-1">{d.noTargetsReason}</div>
+                  )}
                   {d.evaluations?.map((ev, j) => (
                     <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
                       <span>{ev.result ? '✓' : '✗'}</span>
                       <span className="font-mono">{ev.condition.metric} {ev.condition.operator} {ev.condition.value}</span>
-                      <span className="text-slate-500">({ev.condition.timeRange || 'today'})</span>
+                      <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ev.condition.timeRange || 'today'))?.label || ev.condition.timeRange || 'today'})</span>
                       <span>→ Giá trị thực: <strong>{ev.actualValue ?? 'null'}</strong></span>
                       <span className="ml-auto text-slate-400 italic">[{ev.source}]</span>
                     </div>

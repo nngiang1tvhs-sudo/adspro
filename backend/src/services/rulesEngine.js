@@ -395,6 +395,20 @@ const executeRule = async (rule, options = {}) => {
       // ──────────────────────────────────────────────────────────────────
       // Bước 4: Đánh giá điều kiện và thực thi action từng target
       // ──────────────────────────────────────────────────────────────────
+      if (targets.length === 0) {
+        debugEvals.push({
+          target: '[Không tìm thấy đối tượng]',
+          status: null,
+          passed: false,
+          evaluations: [],
+          liveMetricsAvailable: false,
+          noTargets: true,
+          noTargetsReason: rule.target_mode === 'specific'
+            ? 'Không có đối tượng trong DB khớp với chiến dịch đã chọn — hãy đồng bộ dữ liệu trước'
+            : 'Không có đối tượng nào trong tài khoản này',
+        });
+      }
+
       for (const target of targets) {
         if (!bypassCooldown) {
           const inCooldown = await isTargetInCooldown(rule.id, target.external_id, rule.cooldown_minutes);
@@ -407,11 +421,15 @@ const executeRule = async (rule, options = {}) => {
         const evalResult = evaluateAllConditions(conditions, rule.conditions_logic || 'AND', target, account, apiMetricsByRange);
 
         // Lưu debug info cho mọi target
+        const liveMetricsAvailable = evalResult.evaluations.some(
+          ev => ev.source?.startsWith('api_') && !ev.source.endsWith('_not_found')
+        );
         debugEvals.push({
           target: target.name,
           status: target.status,
           passed: evalResult.passed,
           evaluations: evalResult.evaluations,
+          liveMetricsAvailable,
         });
 
         if (!evalResult.passed) continue;
