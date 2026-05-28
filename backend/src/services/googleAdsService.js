@@ -149,6 +149,10 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
         engagements: Number(row.metrics?.engagements || 0),
         engagement_rate: Number(row.metrics?.engagement_rate || 0),
         conversions: Number(row.metrics?.conversions || 0),
+        result: Number(row.metrics?.video_views || row.metrics?.conversions || 0),
+        cost_per_result: row.metrics?.average_cpv
+          ? Number(row.metrics.average_cpv) / 1000000
+          : (Number(row.metrics?.cost_per_conversion || 0) / 1000000),
         cpa: Number(row.metrics?.cost_per_conversion || 0) / 1000000,
         revenue: Number(row.metrics?.conversions_value || 0),
         roas: row.metrics?.cost_micros && row.metrics?.conversions_value
