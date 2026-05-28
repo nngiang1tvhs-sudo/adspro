@@ -146,27 +146,40 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
     switch (action.type) {
       case 'pause':
       case 'tat':
-      case 'turn_off':
-        if (object.type === 'campaign') {
+      case 'turn_off': {
+        const toggleFn = service.toggleObjectStatus || service.toggleCampaignStatus;
+        if (service.toggleObjectStatus) {
+          await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
+        } else {
           await service.toggleCampaignStatus(account.credentials, object.external_id, false);
-          await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
         }
+        // Cập nhật status trong DB theo bảng tương ứng
+        if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
+        else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
+        else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
         }
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
+      }
 
       case 'enable':
       case 'bat':
-      case 'turn_on':
-        if (object.type === 'campaign') {
+      case 'turn_on': {
+        if (service.toggleObjectStatus) {
+          await service.toggleObjectStatus(account.credentials, object.external_id, object.type, true);
+        } else {
           await service.toggleCampaignStatus(account.credentials, object.external_id, true);
-          await query('UPDATE campaigns SET status = $1 WHERE id = $2', [account.platform === 'google' ? 'ENABLED' : 'ACTIVE', object.id]);
         }
+        const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
+        if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
+        else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
+        else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
         }
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
+      }
 
       case 'notify':
       case 'send_email':
@@ -267,19 +280,28 @@ const executeRule = async (rule, options = {}) => {
       for (const tr of uniqueTimeRanges) {
         const dateRange = getDateRange(tr);
         try {
-          if (rule.scope === 'campaign') {
+          if (svc.getAllScopeMetrics) {
+            const metricsMap = await svc.getAllScopeMetrics(account.credentials, dateRange, rule.scope);
+            apiMetricsByRange[tr] = metricsMap;
+            // Cập nhật status map từ API (chỉ cho campaign scope vì chỉ getCampaigns trả status)
+            if (rule.scope === 'campaign') {
+              const campaigns = await svc.getCampaigns(account.credentials, dateRange);
+              for (const c of campaigns) {
+                if (!apiStatusMap[String(c.external_id)]) {
+                  apiStatusMap[String(c.external_id)] = c.status;
+                }
+              }
+            }
+            logger.info(`Rule ${rule.id} [${account.account_name}]: ${tr} scope=${rule.scope} → ${Object.keys(metricsMap).length} items (${dateRange.from}→${dateRange.to})`);
+          } else {
+            // Fallback cho platform chưa có getAllScopeMetrics
             const campaigns = await svc.getCampaigns(account.credentials, dateRange);
             apiMetricsByRange[tr] = {};
             for (const c of campaigns) {
               apiMetricsByRange[tr][String(c.external_id)] = c.metrics;
-              // Lấy status mới nhất từ API (ưu tiên timeRange đầu tiên)
-              if (!apiStatusMap[String(c.external_id)]) {
-                apiStatusMap[String(c.external_id)] = c.status;
-              }
+              if (!apiStatusMap[String(c.external_id)]) apiStatusMap[String(c.external_id)] = c.status;
             }
-            logger.info(`Rule ${rule.id} [${account.account_name}]: ${tr} → ${campaigns.length} campaigns (${dateRange.from}→${dateRange.to})`);
           }
-          // TODO: ad_group, ad scope cũng có thể gọi API tương tự nếu platform hỗ trợ
         } catch (err) {
           logger.warn(`Rule ${rule.id}: Lỗi lấy dữ liệu API ${tr}: ${err.message}`);
         }

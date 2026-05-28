@@ -327,6 +327,99 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
 };
 
 /**
+ * Bật/tắt đối tượng theo scope
+ */
+const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
+  const customer = getCustomer(credentials);
+  const newStatus = enable ? 'ENABLED' : 'PAUSED';
+  try {
+    if (scope === 'ad_group') {
+      await customer.adGroups.update([{
+        resource_name: customer.buildResourceName(`adGroups/${externalId}`),
+        status: newStatus,
+      }]);
+    } else if (scope === 'ad') {
+      // ad_group_ad resource requires composite key — look it up first
+      const res = await customer.query(
+        `SELECT ad_group_ad.resource_name FROM ad_group_ad WHERE ad_group_ad.ad.id = ${externalId} LIMIT 1`
+      );
+      if (res.length > 0) {
+        await customer.adGroupAds.update([{
+          resource_name: res[0].ad_group_ad.resource_name,
+          status: newStatus,
+        }]);
+      }
+    } else {
+      await toggleCampaignStatus(credentials, externalId, enable);
+    }
+    return { success: true };
+  } catch (err) {
+    logger.error(`Google toggleObjectStatus (${scope}) error:`, err.message);
+    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} Google ${scope}: ${err.message}`);
+  }
+};
+
+/**
+ * Lấy metrics theo scope cho toàn bộ tài khoản — dùng cho rules engine
+ */
+const getAllScopeMetrics = async (credentials, dateRange, scope) => {
+  try {
+    if (scope === 'campaign') {
+      const campaigns = await getCampaigns(credentials, dateRange);
+      const map = {};
+      campaigns.forEach(c => { map[String(c.external_id)] = c.metrics; });
+      return map;
+    }
+
+    const customer = getCustomer(credentials);
+    let dateFilter = 'AND segments.date DURING LAST_30_DAYS';
+    if (dateRange.from === 'ALL_TIME') dateFilter = '';
+    else if (dateRange.from && dateRange.to) dateFilter = `AND segments.date BETWEEN '${dateRange.from}' AND '${dateRange.to}'`;
+
+    const buildM = (row) => ({
+      impressions: Number(row.metrics?.impressions || 0),
+      clicks:      Number(row.metrics?.clicks || 0),
+      ctr:         Number(row.metrics?.ctr || 0),
+      cpc:         row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
+      spend:       row.metrics?.cost_micros  ? Number(row.metrics.cost_micros) / 1000000 : 0,
+      video_views: Number(row.metrics?.video_views || 0),
+      cpv:         row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+      conversions: Number(row.metrics?.conversions || 0),
+      cpa:         Number(row.metrics?.cost_per_conversion || 0) / 1000000,
+      result:      Number(row.metrics?.video_views || row.metrics?.conversions || 0),
+      cost_per_result: row.metrics?.average_cpv
+        ? Number(row.metrics.average_cpv) / 1000000
+        : Number(row.metrics?.cost_per_conversion || 0) / 1000000,
+    });
+
+    const map = {};
+    if (scope === 'ad_group') {
+      const results = await customer.query(
+        `SELECT ad_group.id, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+                metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
+                metrics.cost_per_conversion
+         FROM ad_group
+         WHERE ad_group.status != 'REMOVED' ${dateFilter}`
+      );
+      results.forEach(row => { map[String(row.ad_group.id)] = buildM(row); });
+    } else if (scope === 'ad') {
+      const results = await customer.query(
+        `SELECT ad_group_ad.ad.id, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+                metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
+                metrics.cost_per_conversion
+         FROM ad_group_ad
+         WHERE ad_group_ad.status != 'REMOVED' ${dateFilter}`
+      );
+      results.forEach(row => { map[String(row.ad_group_ad.ad.id)] = buildM(row); });
+    }
+    return map;
+  } catch (err) {
+    logger.error(`Google getAllScopeMetrics (${scope}) error:`, err.message);
+    return {};
+  }
+};
+
+/**
  * Map Google channel type sang objective hiển thị
  */
 const mapGoogleObjective = (channelType, subType) => {
@@ -405,6 +498,8 @@ module.exports = {
   getAdGroups,
   getAds,
   toggleCampaignStatus,
+  toggleObjectStatus,
+  getAllScopeMetrics,
   getDailyMetrics,
   getLiveMetrics,
 };

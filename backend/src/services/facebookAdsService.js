@@ -409,6 +409,81 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
   }
 };
 
+/**
+ * Bật/tắt đối tượng theo scope — Facebook dùng cùng endpoint POST /{id} với status
+ */
+const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
+  try {
+    const decrypted = decryptCredentials(credentials);
+    const newStatus = enable ? 'ACTIVE' : 'PAUSED';
+    await axios.post(`${BASE_URL}/${externalId}`, null, {
+      params: { access_token: decrypted.access_token, status: newStatus },
+      timeout: 30000,
+    });
+    return { success: true };
+  } catch (err) {
+    const msg = err.response?.data?.error?.message || err.message;
+    logger.error(`Facebook toggleObjectStatus (${scope}) error:`, msg);
+    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} Facebook ${scope}: ${msg}`);
+  }
+};
+
+/**
+ * Lấy metrics theo scope cho toàn bộ tài khoản — dùng cho rules engine
+ */
+const getAllScopeMetrics = async (credentials, dateRange, scope) => {
+  try {
+    if (scope === 'campaign') {
+      const campaigns = await getCampaigns(credentials, dateRange);
+      const map = {};
+      campaigns.forEach(c => { map[String(c.external_id)] = c.metrics; });
+      return map;
+    }
+
+    const decrypted = decryptCredentials(credentials);
+    const adAccountId = decrypted.ad_account_id.startsWith('act_')
+      ? decrypted.ad_account_id
+      : `act_${decrypted.ad_account_id}`;
+
+    const insightsTimeParam = buildInsightsTimeParam(dateRange);
+    const endpoint = scope === 'ad_group' ? `/${adAccountId}/adsets` : `/${adAccountId}/ads`;
+    const idField = scope === 'ad_group' ? 'id' : 'id';
+
+    const data = await apiCall(endpoint, decrypted.access_token, {
+      fields: [
+        'id', 'name', 'status', 'effective_status',
+        scope === 'ad_group' ? 'optimization_goal' : null,
+        `insights.${insightsTimeParam}{spend,impressions,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
+      ].filter(Boolean).join(','),
+      limit: 500,
+    });
+
+    const map = {};
+    (data.data || []).forEach(item => {
+      const insights = item.insights?.data?.[0] || {};
+      const actions = parseActions(insights.actions || []);
+      const goal = scope === 'ad_group' ? item.optimization_goal : null;
+      const fbResult = computeFbResult(goal, actions, insights);
+      map[String(item.id)] = {
+        spend:           Number(insights.spend || 0),
+        impressions:     Number(insights.impressions || 0),
+        clicks:          Number(insights.clicks || 0),
+        ctr:             Number(insights.ctr || 0),
+        cpc:             Number(insights.cpc || 0),
+        cpm:             Number(insights.cpm || 0),
+        result:          fbResult.result,
+        cost_per_result: fbResult.cost_per_result,
+        conversions:     fbResult.result,
+        cpa:             fbResult.cost_per_result,
+      };
+    });
+    return map;
+  } catch (err) {
+    logger.error(`Facebook getAllScopeMetrics (${scope}) error:`, err.message);
+    return {};
+  }
+};
+
 const getDailyMetrics = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -473,6 +548,8 @@ module.exports = {
   getAdGroups: getAdSets,
   getAds,
   toggleCampaignStatus,
+  toggleObjectStatus,
+  getAllScopeMetrics,
   getDailyMetrics,
   getLiveMetrics,
   mapFacebookObjective,

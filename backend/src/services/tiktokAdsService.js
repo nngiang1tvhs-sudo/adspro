@@ -443,7 +443,98 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
 };
 
 /**
- * Lấy số liệu hằng ngày
+ * Bật/tắt đối tượng theo scope (campaign / ad_group / ad)
+ */
+const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
+  const decrypted = decryptCredentials(credentials);
+  const operation = enable ? 'ENABLE' : 'DISABLE';
+  try {
+    if (scope === 'ad_group') {
+      await apiCall('/adgroup/status/update/', decrypted.access_token, {
+        advertiser_id: decrypted.advertiser_id,
+        adgroup_ids: [externalId],
+        operation_status: operation,
+      }, 'POST');
+    } else if (scope === 'ad') {
+      await apiCall('/ad/status/update/', decrypted.access_token, {
+        advertiser_id: decrypted.advertiser_id,
+        ad_ids: [externalId],
+        operation_status: operation,
+      }, 'POST');
+    } else {
+      await toggleCampaignStatus(credentials, externalId, enable);
+    }
+    return { success: true };
+  } catch (err) {
+    logger.error(`TikTok toggleObjectStatus (${scope}) error:`, err.message);
+    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} TikTok ${scope}: ${err.message}`);
+  }
+};
+
+/**
+ * Lấy metrics theo scope (campaign/ad_group/ad) cho toàn bộ tài khoản — dùng cho rules engine
+ * Trả về map { [externalId]: metrics }
+ */
+const getAllScopeMetrics = async (credentials, dateRange, scope) => {
+  try {
+    if (scope === 'campaign') {
+      const campaigns = await getCampaigns(credentials, dateRange);
+      const map = {};
+      campaigns.forEach(c => { map[String(c.external_id)] = c.metrics; });
+      return map;
+    }
+
+    const decrypted = decryptCredentials(credentials);
+    const today = new Date();
+    const TIKTOK_EPOCH = '2018-01-01';
+    const startDate = dateRange.from === 'ALL_TIME' ? TIKTOK_EPOCH
+      : (dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
+    const endDate = dateRange.to === 'ALL_TIME' ? today.toISOString().split('T')[0]
+      : (dateRange.to || today.toISOString().split('T')[0]);
+
+    const dataLevel = scope === 'ad_group' ? 'AUCTION_ADGROUP' : 'AUCTION_AD';
+    const dimension = scope === 'ad_group' ? 'adgroup_id' : 'ad_id';
+
+    const data = await apiCall('/report/integrated/get/', decrypted.access_token, {
+      advertiser_id: decrypted.advertiser_id,
+      report_type: 'BASIC',
+      data_level: dataLevel,
+      dimensions: JSON.stringify([dimension]),
+      metrics: JSON.stringify([
+        'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm',
+        'conversion', 'cost_per_conversion',
+        'video_play_actions', 'result', 'cost_per_result', 'result_rate',
+      ]),
+      start_date: startDate,
+      end_date: endDate,
+      page_size: 1000,
+    });
+
+    const map = {};
+    (data.list || []).forEach(item => {
+      const id = String(item.dimensions[dimension]);
+      const m = item.metrics || {};
+      map[id] = {
+        spend:           Number(m.spend || 0),
+        impressions:     Number(m.impressions || 0),
+        clicks:          Number(m.clicks || 0),
+        ctr:             Number(m.ctr || 0),
+        cpc:             Number(m.cpc || 0),
+        cpm:             Number(m.cpm || 0),
+        conversions:     Number(m.result || m.conversion || 0),
+        cpa:             Number(m.cost_per_result || m.cost_per_conversion || 0),
+        video_views:     Number(m.video_play_actions || 0),
+        result:          Number(m.result || 0),
+        cost_per_result: Number(m.cost_per_result || 0),
+        follows:         0,
+      };
+    });
+    return map;
+  } catch (err) {
+    logger.error(`TikTok getAllScopeMetrics (${scope}) error:`, err.message);
+    return {};
+  }
+};
  */
 const getDailyMetrics = async (credentials, dateRange = {}) => {
   try {
@@ -503,6 +594,8 @@ module.exports = {
   getAdGroups,
   getAds,
   toggleCampaignStatus,
+  toggleObjectStatus,
+  getAllScopeMetrics,
   getDailyMetrics,
   getLiveMetrics,
   refreshAccessToken,
