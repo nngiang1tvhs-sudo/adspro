@@ -538,15 +538,20 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                 onClick={() => { setTargetMode('specific'); setShowPicker(true); }}
                 className={`px-3 py-1.5 rounded-lg text-sm border-2 transition-colors ${targetMode === 'specific' ? 'border-violet-500 bg-violet-50 text-violet-700' : 'border-slate-200 bg-white text-slate-600'}`}
               >
-                Chọn cụ thể
+                Chọn chiến dịch cụ thể
               </button>
             </div>
 
             {targetMode === 'specific' && (
               <div className="bg-violet-50 border border-violet-200 rounded-lg p-3">
+                {scope !== 'campaign' && (
+                  <div className="text-xs text-violet-500 mb-2 bg-violet-100 rounded px-2 py-1">
+                    Rule sẽ áp dụng cho tất cả {scope === 'ad_group' ? 'nhóm quảng cáo' : 'quảng cáo'} trong các chiến dịch đã chọn
+                  </div>
+                )}
                 {selectedTargets.length === 0 ? (
                   <div className="text-sm text-violet-600 text-center py-2">
-                    Chưa chọn {scope === 'campaign' ? 'chiến dịch' : scope === 'ad_group' ? 'nhóm quảng cáo' : 'quảng cáo'} nào
+                    Chưa chọn chiến dịch nào
                   </div>
                 ) : (
                   <div className="flex flex-wrap gap-1 mb-2">
@@ -568,7 +573,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                   onClick={() => setShowPicker(true)}
                   className="text-xs text-violet-600 hover:text-violet-800 underline"
                 >
-                  {selectedTargets.length === 0 ? '+ Chọn từ danh sách' : 'Sửa danh sách đã chọn'}
+                  {selectedTargets.length === 0 ? '+ Chọn chiến dịch' : 'Sửa danh sách chiến dịch'}
                 </button>
               </div>
             )}
@@ -728,7 +733,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
           <TargetPickerModal
             platform={platform}
             accountId={accountId}
-            scope={scope}
+            scope="campaign"
             selected={selectedTargets}
             onClose={() => setShowPicker(false)}
             onSave={(targets) => { setSelectedTargets(targets); setShowPicker(false); }}

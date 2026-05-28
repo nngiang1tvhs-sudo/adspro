@@ -287,8 +287,17 @@ const executeRule = async (rule, options = {}) => {
 
       // ──────────────────────────────────────────────────────────────────
       // Bước 2: Lấy danh sách targets từ DB (để có internal id cho history/cooldown)
+      // Khi scope là ad_group/ad và target_mode='specific', target_ids chứa campaign IDs
+      // → lọc bằng campaign_id ngay tại bước này, không lọc lại ở bước 3
       // ──────────────────────────────────────────────────────────────────
       let targets = [];
+      let filteredByParentCampaign = false;
+
+      const parseTargetIds = (raw) => {
+        const list = Array.isArray(raw) ? raw : (typeof raw === 'string' ? JSON.parse(raw) : []);
+        return list.map(t => Number(typeof t === 'object' ? t.id : t));
+      };
+
       if (rule.scope === 'campaign') {
         const r = await query(
           'SELECT id, external_id, name, status FROM campaigns WHERE account_id = $1',
@@ -296,32 +305,54 @@ const executeRule = async (rule, options = {}) => {
         );
         targets = r.rows.map(c => ({
           ...c,
-          // Dùng status từ API nếu có (chính xác hơn DB)
           status: apiStatusMap[String(c.external_id)] || c.status,
           type: 'campaign',
         }));
       } else if (rule.scope === 'ad_group') {
-        const r = await query(
-          'SELECT id, external_id, name, status FROM ad_groups WHERE account_id = $1',
-          [account.id]
-        );
-        targets = r.rows.map(g => ({ ...g, type: 'ad_group' }));
+        if (rule.target_mode === 'specific') {
+          const campaignIds = parseTargetIds(rule.target_ids);
+          if (campaignIds.length > 0) {
+            const r = await query(
+              'SELECT id, external_id, name, status FROM ad_groups WHERE account_id = $1 AND campaign_id = ANY($2)',
+              [account.id, campaignIds]
+            );
+            targets = r.rows.map(g => ({ ...g, type: 'ad_group' }));
+          }
+          filteredByParentCampaign = true;
+        } else {
+          const r = await query(
+            'SELECT id, external_id, name, status FROM ad_groups WHERE account_id = $1',
+            [account.id]
+          );
+          targets = r.rows.map(g => ({ ...g, type: 'ad_group' }));
+        }
       } else if (rule.scope === 'ad') {
-        const r = await query(
-          'SELECT id, external_id, name, status FROM ads WHERE account_id = $1',
-          [account.id]
-        );
-        targets = r.rows.map(a => ({ ...a, type: 'ad' }));
+        if (rule.target_mode === 'specific') {
+          const campaignIds = parseTargetIds(rule.target_ids);
+          if (campaignIds.length > 0) {
+            const r = await query(
+              'SELECT id, external_id, name, status FROM ads WHERE account_id = $1 AND campaign_id = ANY($2)',
+              [account.id, campaignIds]
+            );
+            targets = r.rows.map(a => ({ ...a, type: 'ad' }));
+          }
+          filteredByParentCampaign = true;
+        } else {
+          const r = await query(
+            'SELECT id, external_id, name, status FROM ads WHERE account_id = $1',
+            [account.id]
+          );
+          targets = r.rows.map(a => ({ ...a, type: 'ad' }));
+        }
       }
 
       // ──────────────────────────────────────────────────────────────────
       // Bước 3: Lọc targets theo target_mode và target_status_filter
       // ──────────────────────────────────────────────────────────────────
-      if (rule.target_mode === 'specific') {
-        const rawIds = Array.isArray(rule.target_ids) ? rule.target_ids
-          : (typeof rule.target_ids === 'string' ? JSON.parse(rule.target_ids) : []);
+      if (!filteredByParentCampaign && rule.target_mode === 'specific') {
+        const rawIds = parseTargetIds(rule.target_ids);
         if (rawIds.length > 0) {
-          const allowedIds = new Set(rawIds.map(t => Number(typeof t === 'object' ? t.id : t)));
+          const allowedIds = new Set(rawIds);
           targets = targets.filter(t => allowedIds.has(Number(t.id)));
         } else {
           targets = [];
