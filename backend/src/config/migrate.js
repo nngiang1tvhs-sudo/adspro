@@ -283,6 +283,9 @@ ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_ids JSONB DEFAULT '[]';
 -- Thêm cột target_status_filter để lọc theo trạng thái chiến dịch
 ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_status_filter VARCHAR(20) DEFAULT 'all';
 
+-- Mở rộng budget_type: TikTok trả budget_mode dài hơn VARCHAR(20) (vd: BUDGET_MODE_INFINITE)
+ALTER TABLE campaigns ALTER COLUMN budget_type TYPE VARCHAR(50);
+
 -- Xoá duplicate rows trong daily_metrics (giữ lại row có id nhỏ nhất cho mỗi account+campaign+date)
 DELETE FROM daily_metrics
 WHERE id NOT IN (

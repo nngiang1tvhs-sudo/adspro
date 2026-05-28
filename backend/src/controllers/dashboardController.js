@@ -14,8 +14,13 @@ const getDashboard = asyncHandler(async (req, res) => {
     return error(res, 'Platform không hợp lệ', 400);
   }
 
-  const dateFrom = date_from || new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
-  const dateTo = date_to || new Date().toISOString().split('T')[0];
+  const today = new Date().toISOString().split('T')[0];
+  const EPOCH = '2018-01-01';
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString().split('T')[0];
+
+  // Cho SQL BETWEEN – cần ngày thật, không thể dùng chuỗi 'ALL_TIME'
+  const chartDateFrom = date_from === 'ALL_TIME' ? EPOCH : (date_from || thirtyDaysAgo);
+  const chartDateTo   = date_to   === 'ALL_TIME' ? today  : (date_to   || today);
 
   // Lấy accounts
   let accountSql = `SELECT id, platform, credentials, account_name, currency
@@ -39,7 +44,8 @@ const getDashboard = asyncHandler(async (req, res) => {
   await Promise.all(accountsResult.rows.map(async (account) => {
     try {
       const service = getService(account.platform);
-      const campaigns = await service.getCampaigns(account.credentials, { from: dateFrom, to: dateTo });
+      // Live API – truyền trực tiếp date_from/date_to để services xử lý 'ALL_TIME' đúng
+      const campaigns = await service.getCampaigns(account.credentials, { from: date_from, to: date_to });
 
       campaigns.forEach(camp => {
         const obj = camp.objective || 'Khác';
@@ -102,7 +108,7 @@ const getDashboard = asyncHandler(async (req, res) => {
     JOIN ad_accounts a ON dm.account_id = a.id
     WHERE ${baseWhere} AND dm.date BETWEEN $3 AND $4
   `;
-  const chartParams = [...baseParams, dateFrom, dateTo];
+  const chartParams = [...baseParams, chartDateFrom, chartDateTo];
   if (account_id) {
     chartSql += ` AND a.id = $5`;
     chartParams.push(account_id);
@@ -157,7 +163,7 @@ const getDashboard = asyncHandler(async (req, res) => {
 
   return success(res, {
     platform,
-    dateRange: { from: dateFrom, to: dateTo },
+    dateRange: { from: chartDateFrom, to: chartDateTo },
     currency: defaultCurrency,
     objectives: Object.values(groupedByObjective),
     charts,

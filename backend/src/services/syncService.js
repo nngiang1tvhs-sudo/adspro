@@ -85,11 +85,11 @@ const syncAccount = async (accountId, options = {}) => {
         [accountId]
       );
       const externalToDbMap = {};
-      campMap.rows.forEach(c => { externalToDbMap[c.external_id] = c.id; });
+      campMap.rows.forEach(c => { externalToDbMap[String(c.external_id)] = c.id; });
 
       // Upsert daily metrics (tránh duplicate khi sync nhiều lần trong ngày)
       for (const dm of dailyMetrics) {
-        const dbCampaignId = externalToDbMap[dm.campaign_external_id];
+        const dbCampaignId = externalToDbMap[String(dm.campaign_external_id)];
         if (!dbCampaignId) continue;
 
         await query(
