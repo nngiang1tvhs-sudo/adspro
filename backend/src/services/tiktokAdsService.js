@@ -170,20 +170,30 @@ const getCampaigns = async (credentials, dateRange = {}) => {
     };
 
     // TikTok giới hạn 180 ngày cho date range — dùng lifetime:true cho "Toàn thời gian"
+    // Một số metric rate (ctr, cpm...) không hỗ trợ lifetime nên dùng metrics subset
     if (isAllTime) {
       reportParams.lifetime = true;
+      reportParams.metrics = JSON.stringify([
+        'spend', 'impressions', 'clicks',
+        'conversion', 'cost_per_conversion',
+        'video_play_actions', 'follows', 'likes', 'comments', 'shares',
+        'result', 'cost_per_result',
+      ]);
     } else {
       reportParams.start_date = startDate;
       reportParams.end_date = endDate;
     }
 
-    const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, reportParams);
-
-    // Map insights vào campaigns
+    // Wrap insights trong try-catch — nếu lỗi, campaigns vẫn hiển thị (metrics = 0)
     const insightsMap = {};
-    (insightsData.list || []).forEach(item => {
-      insightsMap[item.dimensions.campaign_id] = item.metrics;
-    });
+    try {
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, reportParams);
+      (insightsData.list || []).forEach(item => {
+        insightsMap[item.dimensions.campaign_id] = item.metrics;
+      });
+    } catch (insightErr) {
+      logger.warn('TikTok campaign insights error (campaigns will show without metrics):', insightErr.message);
+    }
 
     return campaigns.map(camp => {
       const m = insightsMap[camp.campaign_id] || {};
