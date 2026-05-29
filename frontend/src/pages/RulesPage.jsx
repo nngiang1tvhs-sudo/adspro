@@ -66,14 +66,30 @@ const STRING_OPERATORS = [
   { key: 'not_equals', label: 'khác' },
 ];
 
-const TIME_RANGES = [
-  { key: 'today', label: 'Hôm nay' },
+const TIME_RANGES_BASE = [
+  { key: 'today',     label: 'Hôm nay' },
   { key: 'yesterday', label: 'Hôm qua' },
-  { key: '3d', label: '3 ngày' },
-  { key: '5d', label: '5 ngày' },
-  { key: '7d', label: '7 ngày' },
-  { key: 'all', label: '30 ngày' },
+  { key: '3d',        label: '3 ngày' },
+  { key: '5d',        label: '5 ngày' },
+  { key: '7d',        label: '7 ngày' },
+  { key: 'all',       label: '30 ngày' },
+  { key: '180d',      label: '180 ngày' },
+  { key: 'lifetime',  label: 'Toàn thời gian' },
 ];
+
+const TIME_RANGES_BY_PLATFORM = {
+  google:   ['today','yesterday','3d','5d','7d','all'],
+  facebook: ['today','yesterday','3d','5d','7d','all','lifetime'],
+  tiktok:   ['today','yesterday','3d','5d','7d','all','180d'],
+};
+
+const getTimeRanges = (platform) => {
+  const keys = TIME_RANGES_BY_PLATFORM[platform] || TIME_RANGES_BY_PLATFORM.google;
+  return TIME_RANGES_BASE.filter(t => keys.includes(t.key));
+};
+
+// Kept for label lookups (debug modal, RuleCard)
+const TIME_RANGES = TIME_RANGES_BASE;
 
 const SCOPE_LABELS = { campaign: 'chiến dịch', ad_group: 'nhóm quảng cáo', ad: 'quảng cáo' };
 
@@ -465,7 +481,8 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
 }
 
 // ============== Condition Row Inputs (reused by flat + group mode) ==============
-function ConditionRowInputs({ c, metrics, onChange, onMetricChange, onRemove }) {
+function ConditionRowInputs({ c, metrics, platform, onChange, onMetricChange, onRemove }) {
+  const timeRanges = getTimeRanges(platform || 'google');
   return (
     <>
       <select
@@ -510,8 +527,8 @@ function ConditionRowInputs({ c, metrics, onChange, onMetricChange, onRemove }) 
             onChange={(e) => onChange('value', Number(e.target.value))}
             className="border border-slate-200 rounded-md px-2 py-1.5 text-xs w-24" placeholder="Giá trị"
           />
-          <select value={c.timeRange || 'today'} onChange={(e) => onChange('timeRange', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-blue-50 text-blue-700 w-32">
-            {TIME_RANGES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+          <select value={c.timeRange || 'today'} onChange={(e) => onChange('timeRange', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-blue-50 text-blue-700 w-36">
+            {timeRanges.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
           </select>
         </>
       )}
@@ -808,7 +825,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                   <div key={idx} className="flex items-center gap-2 flex-wrap">
                     {idx > 0 && <span className="text-xs font-medium text-slate-500">{conditionsLogic}</span>}
                     <ConditionRowInputs
-                      c={c} metrics={metrics}
+                      c={c} metrics={metrics} platform={platform}
                       onChange={(field, val) => {
                         if (field === '__full__') { const n = [...conditions]; n[idx] = val; setConditions(n); }
                         else updateCondition(idx, field, val);
@@ -862,7 +879,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                           <div key={ci} className="flex items-center gap-2 flex-wrap">
                             {ci > 0 && <span className="text-xs font-medium text-violet-400">{group.logic || 'AND'}</span>}
                             <ConditionRowInputs
-                              c={c} metrics={metrics}
+                              c={c} metrics={metrics} platform={platform}
                               onChange={(field, val) => {
                                 if (field === '__full__') updateConditionInGroup(gi, ci, '__full__', val);
                                 else updateConditionInGroup(gi, ci, field, val);

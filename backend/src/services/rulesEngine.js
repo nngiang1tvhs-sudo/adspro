@@ -58,6 +58,12 @@ const getDateRange = (timeRange) => {
       return { from: vn.subtract(4, 'day').format('YYYY-MM-DD'), to: today };
     case '7d':
       return { from: vn.subtract(6, 'day').format('YYYY-MM-DD'), to: today };
+    case '180d':
+      return { from: vn.subtract(179, 'day').format('YYYY-MM-DD'), to: today };
+    case 'lifetime':
+      // Facebook: buildInsightsTimeParam → date_preset(maximum)
+      // TikTok: getCampaigns → lifetime:true
+      return { from: 'ALL_TIME', to: 'ALL_TIME' };
     case 'all':
     default:
       return { from: vn.subtract(30, 'day').format('YYYY-MM-DD'), to: today };
