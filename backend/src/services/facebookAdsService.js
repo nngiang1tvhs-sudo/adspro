@@ -152,6 +152,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
           messages: actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
+          engagements: actions.post_engagement || 0,
           video_2s_views: actions.video_view || 0,
           purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
@@ -453,7 +454,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       fields: [
         'id', 'name', 'status', 'effective_status',
         scope === 'ad_group' ? 'optimization_goal' : null,
-        `insights.${insightsTimeParam}{spend,impressions,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
       ].filter(Boolean).join(','),
       limit: 500,
     });
@@ -467,6 +468,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       map[String(item.id)] = {
         spend:           Number(insights.spend || 0),
         impressions:     Number(insights.impressions || 0),
+        reach:           Number(insights.reach || 0),
         clicks:          Number(insights.clicks || 0),
         ctr:             Number(insights.ctr || 0),
         cpc:             Number(insights.cpc || 0),
@@ -475,6 +477,8 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         cost_per_result: fbResult.cost_per_result,
         conversions:     fbResult.result,
         cpa:             fbResult.cost_per_result,
+        engagements:     actions.post_engagement || 0,
+        messages:        actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
       };
     });
     return map;
