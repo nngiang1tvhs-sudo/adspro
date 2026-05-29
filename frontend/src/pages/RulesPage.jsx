@@ -68,6 +68,7 @@ const STRING_OPERATORS = [
 
 const TIME_RANGES = [
   { key: 'today', label: 'Hôm nay' },
+  { key: 'yesterday', label: 'Hôm qua' },
   { key: '3d', label: '3 ngày' },
   { key: '5d', label: '5 ngày' },
   { key: '7d', label: '7 ngày' },
@@ -277,13 +278,30 @@ export default function RulesPage() {
                     <div className="text-xs text-orange-700 bg-orange-100 rounded px-2 py-1">{d.noTargetsReason}</div>
                   )}
                   {d.evaluations?.map((ev, j) => (
-                    <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
-                      <span>{ev.result ? '✓' : '✗'}</span>
-                      <span className="font-mono">{ev.condition.metric} {ev.condition.operator} {ev.condition.value}</span>
-                      <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ev.condition.timeRange || 'today'))?.label || ev.condition.timeRange || 'today'})</span>
-                      <span>→ Giá trị thực: <strong>{ev.actualValue ?? 'null'}</strong></span>
-                      <span className="ml-auto text-slate-400 italic">[{ev.source}]</span>
-                    </div>
+                    ev.type === 'group' ? (
+                      <div key={j} className={`border rounded-lg p-2 mb-1 ${ev.result ? 'border-emerald-200 bg-emerald-25' : 'border-red-200 bg-red-25'}`}>
+                        <div className="text-[10px] font-semibold text-slate-500 mb-1 uppercase">
+                          {ev.result ? '✓' : '✗'} Nhóm ({ev.logic})
+                        </div>
+                        {ev.evaluations?.map((ge, k) => (
+                          <div key={k} className={`flex items-center gap-2 text-xs py-1 px-2 rounded mb-0.5 ${ge.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                            <span>{ge.result ? '✓' : '✗'}</span>
+                            <span className="font-mono">{ge.condition?.metric} {ge.condition?.operator} {ge.condition?.value}</span>
+                            <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ge.condition?.timeRange || 'today'))?.label || ge.condition?.timeRange || 'today'})</span>
+                            <span>→ <strong>{ge.actualValue ?? 'null'}</strong></span>
+                            <span className="ml-auto text-slate-400 italic">[{ge.source}]</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                        <span>{ev.result ? '✓' : '✗'}</span>
+                        <span className="font-mono">{ev.condition?.metric} {ev.condition?.operator} {ev.condition?.value}</span>
+                        <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ev.condition?.timeRange || 'today'))?.label || ev.condition?.timeRange || 'today'})</span>
+                        <span>→ Giá trị thực: <strong>{ev.actualValue ?? 'null'}</strong></span>
+                        <span className="ml-auto text-slate-400 italic">[{ev.source}]</span>
+                      </div>
+                    )
                   ))}
                 </div>
               ))}
@@ -292,6 +310,35 @@ export default function RulesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+// ── Chip display for a single condition (used in RuleCard) ──
+function ConditionChips({ c, getMetricLabel }) {
+  if (c.metric === 'time') return (
+    <>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200">Thời gian</span>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200">{c.timeStart} → {c.timeEnd}</span>
+    </>
+  );
+  if (c.metric === 'name') return (
+    <>
+      <span className="bg-violet-50 text-violet-700 px-2 py-1 rounded border border-violet-200">Tên</span>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200 text-slate-600">
+        {STRING_OPERATORS.find(o => o.key === c.operator)?.label || c.operator}
+      </span>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200 font-medium italic">"{c.value}"</span>
+    </>
+  );
+  return (
+    <>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200">{getMetricLabel(c.metric)}</span>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200 font-mono">{c.operator}</span>
+      <span className="bg-white px-2 py-1 rounded border border-slate-200 font-medium">{c.value}</span>
+      <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">
+        {TIME_RANGES.find(t => t.key === c.timeRange)?.label || c.timeRange}
+      </span>
+    </>
   );
 }
 
@@ -363,37 +410,35 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
         </div>
       </div>
 
-      {/* Conditions hiển thị xếp ngang */}
+      {/* Conditions */}
       <div className="bg-slate-50 rounded-lg p-3 space-y-2 mb-2">
         <div className="text-[11px] uppercase text-slate-500 font-medium tracking-wide">Điều kiện ({rule.conditions_logic})</div>
-        {conditions.map((c, i) => (
-          <div key={i} className="flex items-center gap-2 text-xs flex-wrap">
-            {i > 0 && <span className="text-slate-400 font-medium">{rule.conditions_logic}</span>}
-            {c.metric === 'time' ? (
-              <>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200">Thời gian</span>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200">{c.timeStart} → {c.timeEnd}</span>
-              </>
-            ) : c.metric === 'name' ? (
-              <>
-                <span className="bg-violet-50 text-violet-700 px-2 py-1 rounded border border-violet-200">Tên</span>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200 text-slate-600">
-                  {STRING_OPERATORS.find(o => o.key === c.operator)?.label || c.operator}
-                </span>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200 font-medium italic">"{c.value}"</span>
-              </>
-            ) : (
-              <>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200">{getMetricLabel(c.metric)}</span>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200 font-mono">{c.operator}</span>
-                <span className="bg-white px-2 py-1 rounded border border-slate-200 font-medium">{c.value}</span>
-                <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded border border-blue-100">
-                  {TIME_RANGES.find(t => t.key === c.timeRange)?.label || c.timeRange}
-                </span>
-              </>
-            )}
-          </div>
-        ))}
+        {conditions.map((c, i) => {
+          if (c.type === 'group') {
+            return (
+              <div key={i}>
+                {i > 0 && <div className="text-[10px] font-semibold text-slate-400 py-0.5">{rule.conditions_logic}</div>}
+                <div className="border border-violet-200 bg-violet-50 rounded-lg p-2">
+                  <div className="text-[10px] text-violet-600 font-semibold mb-1 uppercase">Nhóm {i + 1} ({c.logic || 'AND'})</div>
+                  <div className="space-y-1">
+                    {(c.conditions || []).map((gc, j) => (
+                      <div key={j} className="flex items-center gap-1.5 text-xs flex-wrap">
+                        {j > 0 && <span className="text-violet-400 font-medium text-[10px]">{c.logic || 'AND'}</span>}
+                        <ConditionChips c={gc} getMetricLabel={getMetricLabel} />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div key={i} className="flex items-center gap-2 text-xs flex-wrap">
+              {i > 0 && <span className="text-slate-400 font-medium">{rule.conditions_logic}</span>}
+              <ConditionChips c={c} getMetricLabel={getMetricLabel} />
+            </div>
+          );
+        })}
       </div>
 
       {/* Actions */}
@@ -419,6 +464,65 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
   );
 }
 
+// ============== Condition Row Inputs (reused by flat + group mode) ==============
+function ConditionRowInputs({ c, metrics, onChange, onMetricChange, onRemove }) {
+  return (
+    <>
+      <select
+        value={c.metric || 'spend'}
+        onChange={(e) => onMetricChange(e.target.value)}
+        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white min-w-[160px]"
+      >
+        {metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
+      </select>
+
+      {c.metric === 'time' ? (
+        <>
+          <span className="text-xs text-slate-500">từ</span>
+          <input type="time" value={c.timeStart || '06:00'} onChange={(e) => onChange('timeStart', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs" />
+          <span className="text-xs text-slate-500">đến</span>
+          <input type="time" value={c.timeEnd || '22:00'} onChange={(e) => onChange('timeEnd', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs" />
+        </>
+      ) : c.metric === 'name' ? (
+        <>
+          <select value={c.operator || 'contains'} onChange={(e) => onChange('operator', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white w-36">
+            {STRING_OPERATORS.map(o => <option key={o.key} value={o.key}>{o.label}</option>)}
+          </select>
+          <input
+            type="text" value={c.value || ''} onChange={(e) => onChange('value', e.target.value)}
+            className="border border-slate-200 rounded-md px-2 py-1.5 text-xs flex-1 min-w-[140px]"
+            placeholder='VD: "camp_abc", "test", "video"'
+          />
+          <span className="text-[10px] text-slate-400 whitespace-nowrap">(không phân biệt hoa thường)</span>
+        </>
+      ) : (
+        <>
+          <select value={c.operator || '>'} onChange={(e) => onChange('operator', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white font-mono w-16">
+            <option value=">">{'>'}</option>
+            <option value="<">{'<'}</option>
+            <option value="=">=</option>
+            <option value=">=">≥</option>
+            <option value="<=">≤</option>
+            <option value="!=">≠</option>
+          </select>
+          <input
+            type="number" step="any" value={c.value ?? 0}
+            onChange={(e) => onChange('value', Number(e.target.value))}
+            className="border border-slate-200 rounded-md px-2 py-1.5 text-xs w-24" placeholder="Giá trị"
+          />
+          <select value={c.timeRange || 'today'} onChange={(e) => onChange('timeRange', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-blue-50 text-blue-700 w-32">
+            {TIME_RANGES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
+          </select>
+        </>
+      )}
+
+      <button type="button" onClick={onRemove} className="p-1 text-red-500 hover:bg-red-50 rounded-md ml-auto flex-shrink-0">
+        <X size={14} />
+      </button>
+    </>
+  );
+}
+
 // ============== Rule Form Modal ==============
 function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
   const [name, setName] = useState(rule?.name || '');
@@ -429,9 +533,13 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
   const [isActive, setIsActive] = useState(rule?.is_active !== false);
   const [emailNotify, setEmailNotify] = useState(rule?.email_notify !== false);
   const [conditionsLogic, setConditionsLogic] = useState(rule?.conditions_logic || 'AND');
-  const [conditions, setConditions] = useState(rule?.conditions || [
-    { metric: 'spend', operator: '>', value: 0, timeRange: 'today' }
-  ]);
+  const [conditions, setConditions] = useState(() => {
+    const conds = rule?.conditions || [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }];
+    return Array.isArray(conds) ? conds : [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }];
+  });
+  const [useGroupMode, setUseGroupMode] = useState(() =>
+    Array.isArray(rule?.conditions) && rule.conditions.some(c => c.type === 'group')
+  );
   const [action, setAction] = useState((rule?.actions || [{ type: 'notify' }])[0]?.type || 'notify');
   const [saving, setSaving] = useState(false);
   const [targetMode, setTargetMode] = useState(rule?.target_mode || 'all');
@@ -441,20 +549,74 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
 
   const metrics = METRICS_BY_PLATFORM[platform];
 
-  const addCondition = () => {
-    setConditions([...conditions, { metric: 'spend', operator: '>', value: 0, timeRange: 'today' }]);
+  // ── Flat mode functions ──
+  const addCondition = () =>
+    setConditions(prev => [...prev, { metric: 'spend', operator: '>', value: 0, timeRange: 'today' }]);
+
+  const removeCondition = (idx) =>
+    setConditions(prev => prev.filter((_, i) => i !== idx));
+
+  const updateCondition = (idx, field, value) =>
+    setConditions(prev => { const n = [...prev]; n[idx] = { ...n[idx], [field]: value }; return n; });
+
+  // ── Group mode functions ──
+  const enableGroupMode = () => {
+    const flatConds = conditions.filter(c => !c.type);
+    setConditions([{
+      type: 'group', logic: 'AND',
+      conditions: flatConds.length > 0 ? flatConds : [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }],
+    }]);
+    setUseGroupMode(true);
   };
 
-  const removeCondition = (idx) => {
-    setConditions(conditions.filter((_, i) => i !== idx));
+  const disableGroupMode = () => {
+    const allFlat = conditions.flatMap(c => c.type === 'group' ? (c.conditions || []) : [c]);
+    setConditions(allFlat.length > 0 ? allFlat : [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }]);
+    setUseGroupMode(false);
   };
 
-  const updateCondition = (idx, field, value) => {
-    const newConds = [...conditions];
-    newConds[idx] = { ...newConds[idx], [field]: value };
-    setConditions(newConds);
-  };
+  const addGroup = () =>
+    setConditions(prev => [...prev, {
+      type: 'group', logic: 'AND',
+      conditions: [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }],
+    }]);
 
+  const removeGroup = (gi) =>
+    setConditions(prev => prev.filter((_, i) => i !== gi));
+
+  const updateGroupLogic = (gi, logic) =>
+    setConditions(prev => { const n = [...prev]; n[gi] = { ...n[gi], logic }; return n; });
+
+  const addConditionToGroup = (gi) =>
+    setConditions(prev => {
+      const n = [...prev];
+      n[gi] = { ...n[gi], conditions: [...(n[gi].conditions || []), { metric: 'spend', operator: '>', value: 0, timeRange: 'today' }] };
+      return n;
+    });
+
+  const removeConditionFromGroup = (gi, ci) =>
+    setConditions(prev => {
+      const n = [...prev];
+      n[gi] = { ...n[gi], conditions: n[gi].conditions.filter((_, i) => i !== ci) };
+      return n;
+    });
+
+  const updateConditionInGroup = (gi, ci, field, value) =>
+    setConditions(prev => {
+      const n = [...prev];
+      const gc = [...n[gi].conditions];
+      gc[ci] = { ...gc[ci], [field]: value };
+      n[gi] = { ...n[gi], conditions: gc };
+      return n;
+    });
+
+  const handleMetricChange = (newMetric, currentCond, updateFn) => {
+    if (newMetric === 'name') return updateFn({ metric: 'name', operator: 'contains', value: '' });
+    if (newMetric === 'time') return updateFn({ metric: 'time', timeStart: '06:00', timeEnd: '22:00' });
+    if (currentCond.metric === 'name' || currentCond.metric === 'time')
+      return updateFn({ metric: newMetric, operator: '>', value: 0, timeRange: 'today' });
+    return updateFn({ ...currentCond, metric: newMetric });
+  };
 
   const handleSubmit = async () => {
     if (!name) return toast.error('Vui lòng nhập tên rule');
@@ -617,107 +779,113 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
                   <option value="AND">VÀ (Tất cả phải đúng)</option>
                   <option value="OR">HOẶC (Một trong các điều kiện)</option>
                 </select>
-                <button type="button" onClick={addCondition} className="btn btn-outline btn-sm">
-                  <Plus size={12} /> Thêm
-                </button>
+                {!useGroupMode ? (
+                  <>
+                    <button type="button" onClick={addCondition} className="btn btn-outline btn-sm">
+                      <Plus size={12} /> Thêm
+                    </button>
+                    <button type="button" onClick={enableGroupMode} className="btn btn-outline btn-sm text-violet-600 border-violet-300 hover:bg-violet-50">
+                      Nhóm điều kiện
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button type="button" onClick={addGroup} className="btn btn-outline btn-sm text-violet-600 border-violet-300 hover:bg-violet-50">
+                      <Plus size={12} /> Thêm nhóm
+                    </button>
+                    <button type="button" onClick={disableGroupMode} className="text-xs text-slate-400 hover:text-slate-600 underline">
+                      Chế độ đơn giản
+                    </button>
+                  </>
+                )}
               </div>
             </div>
 
-            <div className="space-y-2 bg-slate-50 p-3 rounded-lg">
-              {conditions.map((c, idx) => (
-                <div key={idx} className="flex items-center gap-2 flex-wrap">
-                  {idx > 0 && <span className="text-xs font-medium text-slate-500">{conditionsLogic}</span>}
-
-                  <select
-                    value={c.metric}
-                    onChange={(e) => {
-                      const newMetric = e.target.value;
-                      const newConds = [...conditions];
-                      if (newMetric === 'name') {
-                        newConds[idx] = { metric: 'name', operator: 'contains', value: '' };
-                      } else if (newMetric === 'time') {
-                        newConds[idx] = { metric: 'time', timeStart: '06:00', timeEnd: '22:00' };
-                      } else if (c.metric === 'name' || c.metric === 'time') {
-                        newConds[idx] = { metric: newMetric, operator: '>', value: 0, timeRange: 'today' };
-                      } else {
-                        newConds[idx] = { ...newConds[idx], metric: newMetric };
+            {!useGroupMode ? (
+              // ── Flat mode ──
+              <div className="space-y-2 bg-slate-50 p-3 rounded-lg">
+                {conditions.map((c, idx) => (
+                  <div key={idx} className="flex items-center gap-2 flex-wrap">
+                    {idx > 0 && <span className="text-xs font-medium text-slate-500">{conditionsLogic}</span>}
+                    <ConditionRowInputs
+                      c={c} metrics={metrics}
+                      onChange={(field, val) => {
+                        if (field === '__full__') { const n = [...conditions]; n[idx] = val; setConditions(n); }
+                        else updateCondition(idx, field, val);
+                      }}
+                      onMetricChange={(newMetric) =>
+                        handleMetricChange(newMetric, c, (next) => { const n = [...conditions]; n[idx] = next; setConditions(n); })
                       }
-                      setConditions(newConds);
-                    }}
-                    className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white min-w-[160px]"
-                  >
-                    {metrics.map(m => <option key={m.key} value={m.key}>{m.label}</option>)}
-                  </select>
-
-                  {c.metric === 'time' ? (
-                    <>
-                      <span className="text-xs text-slate-500">từ</span>
-                      <input
-                        type="time"
-                        value={c.timeStart || '06:00'}
-                        onChange={(e) => updateCondition(idx, 'timeStart', e.target.value)}
-                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs"
-                      />
-                      <span className="text-xs text-slate-500">đến</span>
-                      <input
-                        type="time"
-                        value={c.timeEnd || '22:00'}
-                        onChange={(e) => updateCondition(idx, 'timeEnd', e.target.value)}
-                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs"
-                      />
-                    </>
-                  ) : c.metric === 'name' ? (
-                    <>
-                      <select
-                        value={c.operator || 'contains'}
-                        onChange={(e) => updateCondition(idx, 'operator', e.target.value)}
-                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white w-36"
-                      >
-                        {STRING_OPERATORS.map(o => (
-                          <option key={o.key} value={o.key}>{o.label}</option>
+                      onRemove={() => removeCondition(idx)}
+                    />
+                  </div>
+                ))}
+              </div>
+            ) : (
+              // ── Group mode ──
+              <div className="space-y-3">
+                {conditions.map((group, gi) => (
+                  <div key={gi}>
+                    {gi > 0 && (
+                      <div className="flex items-center gap-2 py-1 px-3">
+                        <div className="flex-1 h-px bg-slate-200" />
+                        <span className="text-xs font-semibold text-slate-400 uppercase">{conditionsLogic}</span>
+                        <div className="flex-1 h-px bg-slate-200" />
+                      </div>
+                    )}
+                    <div className="border-2 border-violet-200 bg-violet-50/40 rounded-xl p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-semibold text-violet-700">Nhóm {gi + 1}</span>
+                          <select
+                            value={group.logic || 'AND'}
+                            onChange={(e) => updateGroupLogic(gi, e.target.value)}
+                            className="text-xs border border-violet-300 bg-white rounded px-2 py-1 text-violet-700"
+                          >
+                            <option value="AND">VÀ</option>
+                            <option value="OR">HOẶC</option>
+                          </select>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button type="button" onClick={() => addConditionToGroup(gi)} className="text-xs text-violet-600 hover:text-violet-800 px-2 py-1 rounded hover:bg-violet-100">
+                            <Plus size={11} className="inline mr-0.5" />Thêm
+                          </button>
+                          {conditions.length > 1 && (
+                            <button type="button" onClick={() => removeGroup(gi)} className="p-1 text-red-400 hover:text-red-600 hover:bg-red-50 rounded">
+                              <X size={13} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        {(group.conditions || []).map((c, ci) => (
+                          <div key={ci} className="flex items-center gap-2 flex-wrap">
+                            {ci > 0 && <span className="text-xs font-medium text-violet-400">{group.logic || 'AND'}</span>}
+                            <ConditionRowInputs
+                              c={c} metrics={metrics}
+                              onChange={(field, val) => {
+                                if (field === '__full__') updateConditionInGroup(gi, ci, '__full__', val);
+                                else updateConditionInGroup(gi, ci, field, val);
+                              }}
+                              onMetricChange={(newMetric) =>
+                                handleMetricChange(newMetric, c, (next) => {
+                                  const n = [...conditions];
+                                  const gc = [...n[gi].conditions];
+                                  gc[ci] = next;
+                                  n[gi] = { ...n[gi], conditions: gc };
+                                  setConditions(n);
+                                })
+                              }
+                              onRemove={() => removeConditionFromGroup(gi, ci)}
+                            />
+                          </div>
                         ))}
-                      </select>
-                      <input
-                        type="text"
-                        value={c.value || ''}
-                        onChange={(e) => updateCondition(idx, 'value', e.target.value)}
-                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs flex-1 min-w-[140px]"
-                        placeholder='VD: "camp_abc", "test", "video"'
-                      />
-                      <span className="text-[10px] text-slate-400 whitespace-nowrap">(không phân biệt hoa thường)</span>
-                    </>
-                  ) : (
-                    <>
-                      <select value={c.operator} onChange={(e) => updateCondition(idx, 'operator', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-white font-mono w-16">
-                        <option value=">">{'>'}</option>
-                        <option value="<">{'<'}</option>
-                        <option value="=">=</option>
-                        <option value=">=">≥</option>
-                        <option value="<=">≤</option>
-                        <option value="!=">≠</option>
-                      </select>
-
-                      <input
-                        type="number"
-                        step="any"
-                        value={c.value}
-                        onChange={(e) => updateCondition(idx, 'value', Number(e.target.value))}
-                        className="border border-slate-200 rounded-md px-2 py-1.5 text-xs w-24"
-                        placeholder="Giá trị"
-                      />
-
-                      <select value={c.timeRange || 'today'} onChange={(e) => updateCondition(idx, 'timeRange', e.target.value)} className="border border-slate-200 rounded-md px-2 py-1.5 text-xs bg-blue-50 text-blue-700 w-32">
-                        {TIME_RANGES.map(t => <option key={t.key} value={t.key}>{t.label}</option>)}
-                      </select>
-                    </>
-                  )}
-
-                  <button type="button" onClick={() => removeCondition(idx)} className="p-1 text-red-500 hover:bg-red-50 rounded-md ml-auto">
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* Actions - single select */}

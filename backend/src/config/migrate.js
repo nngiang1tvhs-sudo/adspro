@@ -283,6 +283,16 @@ ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_ids JSONB DEFAULT '[]';
 -- Thêm cột target_status_filter để lọc theo trạng thái chiến dịch
 ALTER TABLE rules ADD COLUMN IF NOT EXISTS target_status_filter VARCHAR(20) DEFAULT 'all';
 
+-- Thêm cột is_running để ngăn chạy đồng thời trên multi-worker (Railway)
+ALTER TABLE rules ADD COLUMN IF NOT EXISTS is_running BOOLEAN DEFAULT FALSE;
+ALTER TABLE rules ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMP;
+
+-- Index cho concurrent lock check
+CREATE INDEX IF NOT EXISTS idx_rules_running ON rules(id) WHERE is_running = TRUE;
+
+-- Index tối ưu cooldown lookup
+CREATE INDEX IF NOT EXISTS idx_rule_history_cooldown ON rule_history(rule_id, target_id, status, executed_at DESC);
+
 -- Mở rộng budget_type: TikTok trả budget_mode dài hơn VARCHAR(20) (vd: BUDGET_MODE_INFINITE)
 ALTER TABLE campaigns ALTER COLUMN budget_type TYPE VARCHAR(50);
 

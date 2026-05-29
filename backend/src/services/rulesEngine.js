@@ -65,6 +65,37 @@ const getDateRange = (timeRange) => {
 };
 
 /**
+ * Recursively collect unique time ranges from flat or nested-group conditions
+ */
+const collectUniqueTimeRanges = (items) => {
+  const ranges = new Set();
+  const walk = (arr) => {
+    if (!Array.isArray(arr)) return;
+    for (const item of arr) {
+      if (item.type === 'group') {
+        walk(item.conditions || []);
+      } else if (item.metric && item.metric !== 'time' && item.metric !== 'name') {
+        ranges.add(item.timeRange || 'today');
+      }
+    }
+  };
+  walk(items);
+  if (ranges.size === 0) ranges.add('today');
+  return [...ranges];
+};
+
+/**
+ * Recursively check if any evaluation in the tree has live API data
+ */
+const hasLiveMetrics = (evals) => {
+  if (!Array.isArray(evals)) return false;
+  return evals.some(ev => {
+    if (ev.type === 'group') return hasLiveMetrics(ev.evaluations);
+    return ev.source?.startsWith('api_') && !ev.source.endsWith('_not_found');
+  });
+};
+
+/**
  * Lấy giá trị metric từ apiMetricsByRange.
  * apiMetricsByRange[timeRange][external_id] = metrics object từ getCampaigns/getAdGroups
  */
@@ -209,6 +240,46 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
 };
 
 /**
+ * Evaluate a condition tree supporting both flat arrays and nested groups.
+ * Groups: { type:'group', logic:'AND'|'OR', conditions:[...] }
+ * Flat: { metric, operator, value, timeRange }
+ */
+const evaluateConditionTree = (items, topLogic, object, account, apiMetricsByRange) => {
+  if (!items || items.length === 0) return { passed: false, evaluations: [] };
+
+  const hasGroups = items.some(i => i.type === 'group');
+  if (!hasGroups) {
+    return evaluateAllConditions(items, topLogic, object, account, apiMetricsByRange);
+  }
+
+  const evaluations = [];
+  for (const item of items) {
+    if (item.type === 'group') {
+      const groupResult = evaluateAllConditions(
+        item.conditions || [],
+        item.logic || 'AND',
+        object, account, apiMetricsByRange
+      );
+      evaluations.push({
+        type: 'group',
+        logic: item.logic || 'AND',
+        result: groupResult.passed,
+        evaluations: groupResult.evaluations,
+      });
+    } else {
+      const r = evaluateCondition(item, object, account, apiMetricsByRange);
+      evaluations.push({ condition: item, result: r.passed, actualValue: r.actualValue, source: r.source });
+    }
+  }
+
+  const passed = topLogic === 'OR'
+    ? evaluations.some(e => e.result)
+    : evaluations.every(e => e.result);
+
+  return { passed, evaluations };
+};
+
+/**
  * Cooldown per-target
  */
 const isTargetInCooldown = async (ruleId, targetExternalId, cooldownMinutes) => {
@@ -231,11 +302,30 @@ const executeRule = async (rule, options = {}) => {
   const { bypassCooldown = false } = options;
   const startTime = Date.now();
 
+  // Atomic lock acquisition — prevents double execution on Railway multi-worker.
+  // Stale locks older than 10 minutes are auto-broken.
+  const lockResult = await query(
+    `UPDATE rules
+     SET is_running = TRUE, run_started_at = NOW(), last_run_at = NOW(), total_runs = total_runs + 1
+     WHERE id = $1
+       AND (is_running = FALSE OR run_started_at < NOW() - INTERVAL '10 minutes')
+     RETURNING id`,
+    [rule.id]
+  );
+
+  if (lockResult.rowCount === 0) {
+    return {
+      success: true,
+      skipped: true,
+      message: 'Rule đang được thực thi bởi worker khác',
+      triggered: 0,
+      cooldown_skipped: 0,
+      results: [],
+      debug: [],
+    };
+  }
+
   try {
-    await query(
-      'UPDATE rules SET last_run_at = CURRENT_TIMESTAMP, total_runs = total_runs + 1 WHERE id = $1',
-      [rule.id]
-    );
 
     // Lấy danh sách account
     let accounts;
@@ -269,9 +359,9 @@ const executeRule = async (rule, options = {}) => {
       // ──────────────────────────────────────────────────────────────────
       // Bước 1: Gọi API lấy dữ liệu cho từng timeRange trong conditions
       //         Y hệt cách tab chiến dịch lấy số liệu — đúng khoảng thời gian
+      //         collectUniqueTimeRanges hỗ trợ cả flat và nested group conditions
       // ──────────────────────────────────────────────────────────────────
-      const metricConditions = conditions.filter(c => c.metric !== 'time' && c.metric !== 'name');
-      const uniqueTimeRanges = [...new Set(metricConditions.map(c => c.timeRange || 'today'))];
+      const uniqueTimeRanges = collectUniqueTimeRanges(conditions);
 
       const apiMetricsByRange = {};
       // apiStatusMap[external_id] = status hiện tại từ API (để filter theo trạng thái)
@@ -418,12 +508,10 @@ const executeRule = async (rule, options = {}) => {
           }
         }
 
-        const evalResult = evaluateAllConditions(conditions, rule.conditions_logic || 'AND', target, account, apiMetricsByRange);
+        const evalResult = evaluateConditionTree(conditions, rule.conditions_logic || 'AND', target, account, apiMetricsByRange);
 
         // Lưu debug info cho mọi target
-        const liveMetricsAvailable = evalResult.evaluations.some(
-          ev => ev.source?.startsWith('api_') && !ev.source.endsWith('_not_found')
-        );
+        const liveMetricsAvailable = hasLiveMetrics(evalResult.evaluations);
         debugEvals.push({
           target: target.name,
           status: target.status,
@@ -501,6 +589,9 @@ const executeRule = async (rule, options = {}) => {
       [rule.id, err.message]
     );
     return { success: false, message: err.message };
+  } finally {
+    // Release concurrent lock
+    await query('UPDATE rules SET is_running = FALSE, run_started_at = NULL WHERE id = $1', [rule.id]);
   }
 };
 
@@ -528,6 +619,8 @@ module.exports = {
   executeRule,
   runAllActiveRules,
   evaluateAllConditions,
+  evaluateConditionTree,
   evaluateCondition,
+  collectUniqueTimeRanges,
   OPERATORS,
 };
