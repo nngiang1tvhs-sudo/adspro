@@ -193,6 +193,33 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       });
     } catch (insightErr) {
       logger.warn('TikTok campaign insights error (campaigns will show without metrics):', insightErr.message);
+      // Nếu lifetime thất bại, thử lại với 180 ngày gần nhất
+      if (isAllTime) {
+        try {
+          const fallbackEnd = today.toISOString().split('T')[0];
+          const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const fallbackParams = {
+            ...reportParams,
+            metrics: JSON.stringify([
+              'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'reach', 'frequency',
+              'conversion', 'conversion_rate', 'cost_per_conversion',
+              'video_play_actions', 'video_views_p25', 'video_views_p50', 'video_views_p75', 'video_views_p100',
+              'profile_visits', 'follows', 'likes', 'comments', 'shares',
+              'result', 'cost_per_result', 'result_rate',
+            ]),
+            start_date: fallbackStart,
+            end_date: fallbackEnd,
+          };
+          delete fallbackParams.lifetime;
+          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          (fallbackData.list || []).forEach(item => {
+            insightsMap[item.dimensions.campaign_id] = item.metrics;
+          });
+          logger.info('TikTok: dùng fallback 180 ngày thay lifetime thành công');
+        } catch (fallbackErr) {
+          logger.error('TikTok campaign insights fallback cũng thất bại:', fallbackErr.message);
+        }
+      }
     }
 
     return campaigns.map(camp => {
