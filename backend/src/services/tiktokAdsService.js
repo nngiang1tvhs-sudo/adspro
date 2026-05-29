@@ -16,6 +16,9 @@ const { query } = require('../config/database');
 
 const BASE_URL = 'https://business-api.tiktok.com/open_api/v1.3';
 
+// TikTok trả "-" cho metric không có data — parse an toàn
+const n = (val) => { const v = Number(val); return isNaN(v) ? 0 : v; };
+
 const apiCall = async (endpoint, accessToken, params = {}, method = 'GET') => {
   try {
     const config = {
@@ -234,30 +237,30 @@ const getCampaigns = async (credentials, dateRange = {}) => {
         budget: Number(camp.budget || 0),
         budget_type: camp.budget_mode,
         metrics: {
-          spend: Number(m.spend || 0),
-          impressions: Number(m.impressions || 0),
-          clicks: Number(m.clicks || 0),
-          ctr: Number(m.ctr || 0),
-          cpc: Number(m.cpc || 0),
-          cpm: Number(m.cpm || 0),
-          reach: Number(m.reach || 0),
-          frequency: Number(m.frequency || 0),
-          conversions: Number(m.conversion || 0),
-          conversion_rate: Number(m.conversion_rate || 0),
-          cpa: Number(m.cost_per_conversion || 0),
-          video_views: Number(m.video_play_actions || 0),
-          video_p25: Number(m.video_views_p25 || 0),
-          video_p50: Number(m.video_views_p50 || 0),
-          video_p75: Number(m.video_views_p75 || 0),
-          video_p100: Number(m.video_views_p100 || 0),
-          follows: Number(m.follows || 0),
-          likes: Number(m.likes || 0),
-          comments: Number(m.comments || 0),
-          shares: Number(m.shares || 0),
-          profile_visits: Number(m.profile_visits || 0),
-          result: Number(m.result || 0),
-          cost_per_result: Number(m.cost_per_result || 0),
-          result_rate: Number(m.result_rate || 0),
+          spend: n(m.spend),
+          impressions: n(m.impressions),
+          clicks: n(m.clicks),
+          ctr: n(m.ctr),
+          cpc: n(m.cpc),
+          cpm: n(m.cpm),
+          reach: n(m.reach),
+          frequency: n(m.frequency),
+          conversions: n(m.conversion),
+          conversion_rate: n(m.conversion_rate),
+          cpa: n(m.cost_per_conversion),
+          video_views: n(m.video_play_actions),
+          video_p25: n(m.video_views_p25),
+          video_p50: n(m.video_views_p50),
+          video_p75: n(m.video_views_p75),
+          video_p100: n(m.video_views_p100),
+          follows: n(m.follows),
+          likes: n(m.likes),
+          comments: n(m.comments),
+          shares: n(m.shares),
+          profile_visits: n(m.profile_visits),
+          result: n(m.result),
+          cost_per_result: n(m.cost_per_result),
+          result_rate: n(m.result_rate),
         },
         raw_data: { ...camp, insights: m },
       };
@@ -351,12 +354,28 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         adgroupReportParams.start_date = startDate;
         adgroupReportParams.end_date = endDate;
       }
-      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
-      (insightsData.list || []).forEach(item => {
-        insightsMap[item.dimensions.adgroup_id] = item.metrics;
-      });
+      try {
+        const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
+        (insightsData.list || []).forEach(item => {
+          insightsMap[item.dimensions.adgroup_id] = item.metrics;
+        });
+      } catch (lifetimeErr) {
+        if (isAllTime) {
+          // Fallback về 180 ngày nếu lifetime thất bại
+          const fallbackEnd = today.toISOString().split('T')[0];
+          const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const fallbackParams = { ...adgroupReportParams, start_date: fallbackStart, end_date: fallbackEnd };
+          delete fallbackParams.lifetime;
+          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          (fallbackData.list || []).forEach(item => {
+            insightsMap[item.dimensions.adgroup_id] = item.metrics;
+          });
+        } else {
+          logger.warn('TikTok adgroup insights warning:', lifetimeErr.message);
+        }
+      }
     } catch (insightErr) {
-      logger.warn('TikTok adgroup insights warning:', insightErr.message);
+      logger.warn('TikTok adgroup insights error:', insightErr.message);
     }
 
     return adGroups.map(ag => {
@@ -371,21 +390,21 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         target_cpa: Number(ag.conversion_bid_price || 0),
         budget: Number(ag.budget || 0),
         metrics: {
-          spend: Number(m.spend || 0),
-          impressions: Number(m.impressions || 0),
-          clicks: Number(m.clicks || 0),
-          ctr: Number(m.ctr || 0),
-          cpc: Number(m.cpc || 0),
-          cpm: Number(m.cpm || 0),
-          reach: Number(m.reach || 0),
-          frequency: Number(m.frequency || 0),
-          conversions: Number(m.result || m.conversion || 0),
-          conversion_rate: Number(m.result_rate || m.conversion_rate || 0),
-          cpa: Number(m.cost_per_result || m.cost_per_conversion || 0),
-          video_views: Number(m.video_play_actions || 0),
-          result: Number(m.result || 0),
-          cost_per_result: Number(m.cost_per_result || 0),
-          result_rate: Number(m.result_rate || 0),
+          spend: n(m.spend),
+          impressions: n(m.impressions),
+          clicks: n(m.clicks),
+          ctr: n(m.ctr),
+          cpc: n(m.cpc),
+          cpm: n(m.cpm),
+          reach: n(m.reach),
+          frequency: n(m.frequency),
+          conversions: n(m.result || m.conversion),
+          conversion_rate: n(m.result_rate || m.conversion_rate),
+          cpa: n(m.cost_per_result || m.cost_per_conversion),
+          video_views: n(m.video_play_actions),
+          result: n(m.result),
+          cost_per_result: n(m.cost_per_result),
+          result_rate: n(m.result_rate),
         },
         raw_data: ag,
       };
@@ -445,12 +464,28 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         adReportParams.start_date = startDate;
         adReportParams.end_date = endDate;
       }
-      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adReportParams);
-      (insightsData.list || []).forEach(item => {
-        insightsMap[item.dimensions.ad_id] = item.metrics;
-      });
+      try {
+        const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adReportParams);
+        (insightsData.list || []).forEach(item => {
+          insightsMap[item.dimensions.ad_id] = item.metrics;
+        });
+      } catch (lifetimeErr) {
+        if (isAllTime) {
+          // Fallback về 180 ngày nếu lifetime thất bại
+          const fallbackEnd = today.toISOString().split('T')[0];
+          const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+          const fallbackParams = { ...adReportParams, start_date: fallbackStart, end_date: fallbackEnd };
+          delete fallbackParams.lifetime;
+          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          (fallbackData.list || []).forEach(item => {
+            insightsMap[item.dimensions.ad_id] = item.metrics;
+          });
+        } else {
+          logger.warn('TikTok ad insights warning:', lifetimeErr.message);
+        }
+      }
     } catch (insightErr) {
-      logger.warn('TikTok ad insights warning:', insightErr.message);
+      logger.warn('TikTok ad insights error:', insightErr.message);
     }
 
     return ads.map(ad => {
@@ -465,21 +500,21 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         headline: ad.ad_text,
         landing_url: ad.landing_page_url,
         metrics: {
-          spend: Number(m.spend || 0),
-          impressions: Number(m.impressions || 0),
-          clicks: Number(m.clicks || 0),
-          ctr: Number(m.ctr || 0),
-          cpc: Number(m.cpc || 0),
-          cpm: Number(m.cpm || 0),
-          reach: Number(m.reach || 0),
-          frequency: Number(m.frequency || 0),
-          conversions: Number(m.result || m.conversion || 0),
-          conversion_rate: Number(m.result_rate || m.conversion_rate || 0),
-          cpa: Number(m.cost_per_result || m.cost_per_conversion || 0),
-          video_views: Number(m.video_play_actions || 0),
-          result: Number(m.result || 0),
-          cost_per_result: Number(m.cost_per_result || 0),
-          result_rate: Number(m.result_rate || 0),
+          spend: n(m.spend),
+          impressions: n(m.impressions),
+          clicks: n(m.clicks),
+          ctr: n(m.ctr),
+          cpc: n(m.cpc),
+          cpm: n(m.cpm),
+          reach: n(m.reach),
+          frequency: n(m.frequency),
+          conversions: n(m.result || m.conversion),
+          conversion_rate: n(m.result_rate || m.conversion_rate),
+          cpa: n(m.cost_per_result || m.cost_per_conversion),
+          video_views: n(m.video_play_actions),
+          result: n(m.result),
+          cost_per_result: n(m.cost_per_result),
+          result_rate: n(m.result_rate),
         },
         raw_data: ad,
       };
@@ -584,17 +619,17 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       const id = String(item.dimensions[dimension]);
       const m = item.metrics || {};
       map[id] = {
-        spend:           Number(m.spend || 0),
-        impressions:     Number(m.impressions || 0),
-        clicks:          Number(m.clicks || 0),
-        ctr:             Number(m.ctr || 0),
-        cpc:             Number(m.cpc || 0),
-        cpm:             Number(m.cpm || 0),
-        conversions:     Number(m.result || m.conversion || 0),
-        cpa:             Number(m.cost_per_result || m.cost_per_conversion || 0),
-        video_views:     Number(m.video_play_actions || 0),
-        result:          Number(m.result || 0),
-        cost_per_result: Number(m.cost_per_result || 0),
+        spend:           n(m.spend),
+        impressions:     n(m.impressions),
+        clicks:          n(m.clicks),
+        ctr:             n(m.ctr),
+        cpc:             n(m.cpc),
+        cpm:             n(m.cpm),
+        conversions:     n(m.result || m.conversion),
+        cpa:             n(m.cost_per_result || m.cost_per_conversion),
+        video_views:     n(m.video_play_actions),
+        result:          n(m.result),
+        cost_per_result: n(m.cost_per_result),
         follows:         0,
       };
     });
