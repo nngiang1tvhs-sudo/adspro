@@ -182,7 +182,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
       return {
         external_id: camp.campaign_id,
         name: camp.campaign_name,
-        status: camp.operation_status,
+        status: mapTikTokStatus(camp.operation_status),
         objective: mapTikTokObjective(camp.objective_type),
         original_objective: camp.objective_type,
         campaign_type: camp.campaign_type,
@@ -221,6 +221,20 @@ const getCampaigns = async (credentials, dateRange = {}) => {
     logger.error('TikTok getCampaigns error:', err.message);
     throw new Error(`Lỗi lấy chiến dịch TikTok: ${err.message}`);
   }
+};
+
+/**
+ * Map TikTok operation_status sang chuẩn nội bộ
+ */
+const mapTikTokStatus = (status) => {
+  if (!status) return status;
+  const s = status.toUpperCase();
+  if (s.includes('ENABLE') || s === 'ADVERTISER_CONTRACT_PENDING') return 'ENABLED';
+  if (s.includes('DISABLE') || s.includes('PAUSE') || s.includes('BUDGET_EXCEED') ||
+      s.includes('TIME_DONE') || s.includes('NOT_START') || s.includes('FROZEN') ||
+      s.includes('AUDIT') || s.includes('REOPEN')) return 'PAUSED';
+  if (s.includes('DELETE') || s.includes('ARCHIVE')) return 'REMOVED';
+  return status;
 };
 
 /**
