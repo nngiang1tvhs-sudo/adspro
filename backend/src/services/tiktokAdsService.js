@@ -144,12 +144,12 @@ const getCampaigns = async (credentials, dateRange = {}) => {
 
     // Bước 2: Lấy insights cho tất cả campaigns
     const today = new Date();
-    const TIKTOK_EPOCH = '2018-01-01';
-    const startDate = dateRange.from === 'ALL_TIME' ? TIKTOK_EPOCH : (dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-    const endDate = dateRange.to === 'ALL_TIME' ? today.toISOString().split('T')[0] : (dateRange.to || today.toISOString().split('T')[0]);
+    const isAllTime = dateRange.from === 'ALL_TIME';
+    const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = dateRange.to || today.toISOString().split('T')[0];
 
     const campaignIds = campaigns.map(c => c.campaign_id);
-    const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, {
+    const reportParams = {
       advertiser_id: decrypted.advertiser_id,
       report_type: 'BASIC',
       data_level: 'AUCTION_CAMPAIGN',
@@ -161,15 +161,23 @@ const getCampaigns = async (credentials, dateRange = {}) => {
         'profile_visits', 'follows', 'likes', 'comments', 'shares',
         'result', 'cost_per_result', 'result_rate',
       ]),
-      start_date: startDate,
-      end_date: endDate,
       page_size: 200,
       filters: JSON.stringify([{
         field_name: 'campaign_ids',
         filter_type: 'IN',
         filter_value: JSON.stringify(campaignIds),
       }]),
-    });
+    };
+
+    // TikTok giới hạn 180 ngày cho date range — dùng lifetime:true cho "Toàn thời gian"
+    if (isAllTime) {
+      reportParams.lifetime = true;
+    } else {
+      reportParams.start_date = startDate;
+      reportParams.end_date = endDate;
+    }
+
+    const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, reportParams);
 
     // Map insights vào campaigns
     const insightsMap = {};
@@ -275,15 +283,15 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
 
     // Lấy insights cho các ad groups
     const today = new Date();
-    const TIKTOK_EPOCH = '2018-01-01';
-    const startDate = dateRange.from === 'ALL_TIME' ? TIKTOK_EPOCH : (dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-    const endDate = dateRange.to === 'ALL_TIME' ? today.toISOString().split('T')[0] : (dateRange.to || today.toISOString().split('T')[0]);
+    const isAllTime = dateRange.from === 'ALL_TIME';
+    const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = dateRange.to || today.toISOString().split('T')[0];
 
     const adGroupIds = adGroups.map(ag => ag.adgroup_id);
     let insightsMap = {};
 
     try {
-      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, {
+      const adgroupReportParams = {
         advertiser_id: decrypted.advertiser_id,
         report_type: 'BASIC',
         data_level: 'AUCTION_ADGROUP',
@@ -293,15 +301,20 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
           'conversion', 'conversion_rate', 'cost_per_conversion',
           'video_play_actions', 'result', 'cost_per_result', 'result_rate',
         ]),
-        start_date: startDate,
-        end_date: endDate,
         page_size: 200,
         filters: JSON.stringify([{
           field_name: 'adgroup_ids',
           filter_type: 'IN',
           filter_value: JSON.stringify(adGroupIds),
         }]),
-      });
+      };
+      if (isAllTime) {
+        adgroupReportParams.lifetime = true;
+      } else {
+        adgroupReportParams.start_date = startDate;
+        adgroupReportParams.end_date = endDate;
+      }
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
       (insightsData.list || []).forEach(item => {
         insightsMap[item.dimensions.adgroup_id] = item.metrics;
       });
@@ -364,15 +377,15 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
 
     // Lấy insights cho các ads
     const today = new Date();
-    const TIKTOK_EPOCH = '2018-01-01';
-    const startDate = dateRange.from === 'ALL_TIME' ? TIKTOK_EPOCH : (dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]);
-    const endDate = dateRange.to === 'ALL_TIME' ? today.toISOString().split('T')[0] : (dateRange.to || today.toISOString().split('T')[0]);
+    const isAllTime = dateRange.from === 'ALL_TIME';
+    const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const endDate = dateRange.to || today.toISOString().split('T')[0];
 
     const adIds = ads.map(ad => ad.ad_id);
     let insightsMap = {};
 
     try {
-      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, {
+      const adReportParams = {
         advertiser_id: decrypted.advertiser_id,
         report_type: 'BASIC',
         data_level: 'AUCTION_AD',
@@ -382,15 +395,20 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
           'conversion', 'conversion_rate', 'cost_per_conversion',
           'video_play_actions', 'result', 'cost_per_result', 'result_rate',
         ]),
-        start_date: startDate,
-        end_date: endDate,
         page_size: 200,
         filters: JSON.stringify([{
           field_name: 'ad_ids',
           filter_type: 'IN',
           filter_value: JSON.stringify(adIds),
         }]),
-      });
+      };
+      if (isAllTime) {
+        adReportParams.lifetime = true;
+      } else {
+        adReportParams.start_date = startDate;
+        adReportParams.end_date = endDate;
+      }
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adReportParams);
       (insightsData.list || []).forEach(item => {
         insightsMap[item.dimensions.ad_id] = item.metrics;
       });
