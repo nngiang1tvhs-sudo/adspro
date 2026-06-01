@@ -454,7 +454,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       fields: [
         'id', 'name', 'status', 'effective_status',
         scope === 'ad_group' ? 'optimization_goal' : null,
-        scope === 'ad_group' ? 'campaign_id' : null,
+        'campaign_id',
         `insights.${insightsTimeParam}{spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
       ].filter(Boolean).join(','),
       limit: 500,
