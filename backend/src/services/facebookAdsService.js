@@ -328,6 +328,7 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
         metrics: {
           spend: Number(insights.spend || 0),
           impressions: Number(insights.impressions || 0),
+          reach: Number(insights.reach || 0),
           clicks: Number(insights.clicks || 0),
           ctr: Number(insights.ctr || 0),
           cpc: Number(insights.cpc || 0),
