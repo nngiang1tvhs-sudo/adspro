@@ -379,7 +379,7 @@ const executeRule = async (rule, options = {}) => {
           if (svc.getAllScopeMetrics) {
             const metricsMap = await svc.getAllScopeMetrics(account.credentials, dateRange, rule.scope);
             apiMetricsByRange[tr] = metricsMap;
-            // Cập nhật status map từ API (chỉ cho campaign scope vì chỉ getCampaigns trả status)
+            // Cập nhật status map từ API
             if (rule.scope === 'campaign') {
               const campaigns = await svc.getCampaigns(account.credentials, dateRange);
               for (const c of campaigns) {
@@ -387,8 +387,13 @@ const executeRule = async (rule, options = {}) => {
                   apiStatusMap[String(c.external_id)] = c.status;
                 }
               }
+            } else if (metricsMap['__items__']) {
+              for (const item of metricsMap['__items__']) {
+                if (!apiStatusMap[item.external_id]) apiStatusMap[item.external_id] = item.status;
+              }
             }
-            logger.info(`Rule ${rule.id} [${account.account_name}]: ${tr} scope=${rule.scope} → ${Object.keys(metricsMap).length} items (${dateRange.from}→${dateRange.to})`);
+            const itemCount = Object.keys(metricsMap).filter(k => k !== '__items__').length;
+            logger.info(`Rule ${rule.id} [${account.account_name}]: ${tr} scope=${rule.scope} → ${itemCount} items (${dateRange.from}→${dateRange.to})`);
           } else {
             // Fallback cho platform chưa có getAllScopeMetrics
             const campaigns = await svc.getCampaigns(account.credentials, dateRange);
@@ -403,10 +408,29 @@ const executeRule = async (rule, options = {}) => {
         }
       }
 
+      // Gom tất cả item metadata từ __items__ của các timeRange → apiItemsMap
+      // dùng để build targets cho ad_group/ad scope mà không cần query DB
+      const apiItemsMap = {}; // external_id → {external_id, name, status, campaign_external_id}
+      if (rule.scope !== 'campaign') {
+        for (const tr of uniqueTimeRanges) {
+          const items = apiMetricsByRange[tr]?.['__items__'];
+          if (items) {
+            for (const item of items) {
+              if (!apiItemsMap[item.external_id]) apiItemsMap[item.external_id] = item;
+            }
+          }
+        }
+        // Xoá __items__ khỏi metrics map để không ảnh hưởng đến lookup metrics
+        for (const tr of uniqueTimeRanges) {
+          if (apiMetricsByRange[tr]) delete apiMetricsByRange[tr]['__items__'];
+        }
+      }
+
       // ──────────────────────────────────────────────────────────────────
-      // Bước 2: Lấy danh sách targets từ DB (để có internal id cho history/cooldown)
-      // Khi scope là ad_group/ad và target_mode='specific', target_ids chứa campaign IDs
-      // → lọc bằng campaign_id ngay tại bước này, không lọc lại ở bước 3
+      // Bước 2: Lấy danh sách targets
+      // - campaign scope: query DB (campaigns được sync thường xuyên)
+      // - ad_group/ad scope: ưu tiên dùng API items (apiItemsMap) vì ad_groups/ads
+      //   không được sync vào DB; fallback sang DB nếu API không trả __items__
       // ──────────────────────────────────────────────────────────────────
       let targets = [];
       let filteredByParentCampaign = false;
@@ -426,7 +450,39 @@ const executeRule = async (rule, options = {}) => {
           status: apiStatusMap[String(c.external_id)] || c.status,
           type: 'campaign',
         }));
+      } else if (Object.keys(apiItemsMap).length > 0) {
+        // Dùng API items cho ad_group/ad — không cần DB
+        const type = rule.scope;
+        let apiItems = Object.values(apiItemsMap).map(item => ({
+          id: item.external_id, // dùng external_id làm id proxy (không có DB id)
+          external_id: item.external_id,
+          name: item.name,
+          status: item.status,
+          type,
+        }));
+
+        if (rule.target_mode === 'specific') {
+          const campaignDbIds = parseTargetIds(rule.target_ids);
+          if (campaignDbIds.length > 0) {
+            // Tra cứu external_id của các campaign đã chọn từ DB
+            const campRes = await query(
+              'SELECT external_id FROM campaigns WHERE id = ANY($1) AND account_id = $2',
+              [campaignDbIds, account.id]
+            );
+            const allowedCampExtIds = new Set(campRes.rows.map(r => String(r.external_id)));
+            apiItems = apiItems.filter(item => {
+              const campExtId = apiItemsMap[item.external_id]?.campaign_external_id;
+              return campExtId && allowedCampExtIds.has(campExtId);
+            });
+          } else {
+            apiItems = [];
+          }
+          filteredByParentCampaign = true;
+        }
+
+        targets = apiItems;
       } else if (rule.scope === 'ad_group') {
+        // Fallback DB cho ad_group (nếu API không trả __items__)
         if (rule.target_mode === 'specific') {
           const campaignIds = parseTargetIds(rule.target_ids);
           if (campaignIds.length > 0) {
@@ -445,6 +501,7 @@ const executeRule = async (rule, options = {}) => {
           targets = r.rows.map(g => ({ ...g, type: 'ad_group' }));
         }
       } else if (rule.scope === 'ad') {
+        // Fallback DB cho ad (nếu API không trả __items__)
         if (rule.target_mode === 'specific') {
           const campaignIds = parseTargetIds(rule.target_ids);
           if (campaignIds.length > 0) {
@@ -500,7 +557,7 @@ const executeRule = async (rule, options = {}) => {
           liveMetricsAvailable: false,
           noTargets: true,
           noTargetsReason: rule.target_mode === 'specific'
-            ? 'Không có đối tượng trong DB khớp với chiến dịch đã chọn — hãy đồng bộ dữ liệu trước'
+            ? 'Không có đối tượng nào thuộc chiến dịch đã chọn trong khoảng thời gian này'
             : 'Không có đối tượng nào trong tài khoản này',
         });
       }

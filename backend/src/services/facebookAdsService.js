@@ -454,13 +454,15 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       fields: [
         'id', 'name', 'status', 'effective_status',
         scope === 'ad_group' ? 'optimization_goal' : null,
+        scope === 'ad_group' ? 'campaign_id' : null,
         `insights.${insightsTimeParam}{spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
       ].filter(Boolean).join(','),
       limit: 500,
     });
 
+    const items = data.data || [];
     const map = {};
-    (data.data || []).forEach(item => {
+    items.forEach(item => {
       const insights = item.insights?.data?.[0] || {};
       const actions = parseActions(insights.actions || []);
       const goal = scope === 'ad_group' ? item.optimization_goal : null;
@@ -481,6 +483,14 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         messages:        actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
       };
     });
+    // Attach item metadata so rulesEngine can build targets without DB lookup
+    map['__items__'] = items.map(item => ({
+      external_id: String(item.id),
+      name: item.name,
+      status: item.status,
+      effective_status: item.effective_status,
+      campaign_external_id: item.campaign_id ? String(item.campaign_id) : null,
+    }));
     return map;
   } catch (err) {
     logger.error(`Facebook getAllScopeMetrics (${scope}) error:`, err.message);

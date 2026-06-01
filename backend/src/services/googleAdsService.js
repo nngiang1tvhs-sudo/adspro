@@ -395,22 +395,44 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     const map = {};
     if (scope === 'ad_group') {
       const results = await customer.query(
-        `SELECT ad_group.id, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+        `SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id AS campaign_id,
+                metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
                 metrics.cost_per_conversion
          FROM ad_group
          WHERE ad_group.status != 'REMOVED' ${dateFilter}`
       );
-      results.forEach(row => { map[String(row.ad_group.id)] = buildM(row); });
+      const items = [];
+      results.forEach(row => {
+        map[String(row.ad_group.id)] = buildM(row);
+        items.push({
+          external_id: String(row.ad_group.id),
+          name: row.ad_group.name,
+          status: row.ad_group.status,
+          campaign_external_id: row.campaign?.id ? String(row.campaign.id) : null,
+        });
+      });
+      map['__items__'] = items;
     } else if (scope === 'ad') {
       const results = await customer.query(
-        `SELECT ad_group_ad.ad.id, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
+        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.campaign_id,
+                metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
                 metrics.cost_per_conversion
          FROM ad_group_ad
          WHERE ad_group_ad.status != 'REMOVED' ${dateFilter}`
       );
-      results.forEach(row => { map[String(row.ad_group_ad.ad.id)] = buildM(row); });
+      const items = [];
+      results.forEach(row => {
+        map[String(row.ad_group_ad.ad.id)] = buildM(row);
+        items.push({
+          external_id: String(row.ad_group_ad.ad.id),
+          name: row.ad_group_ad.ad.name || String(row.ad_group_ad.ad.id),
+          status: row.ad_group_ad.status,
+          campaign_external_id: row.ad_group?.campaign_id ? String(row.ad_group.campaign_id) : null,
+        });
+      });
+      map['__items__'] = items;
     }
     return map;
   } catch (err) {
