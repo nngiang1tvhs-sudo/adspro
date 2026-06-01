@@ -633,6 +633,40 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         follows:         0,
       };
     });
+
+    // Fetch item metadata (name/status/campaign_id) for rulesEngine target building
+    try {
+      if (scope === 'ad_group') {
+        const listData = await apiCall('/adgroup/get/', decrypted.access_token, {
+          advertiser_id: decrypted.advertiser_id,
+          page_size: 1000,
+        });
+        map['__items__'] = (listData.list || [])
+          .filter(ag => map[String(ag.adgroup_id)] !== undefined)
+          .map(ag => ({
+            external_id: String(ag.adgroup_id),
+            name: ag.adgroup_name,
+            status: ag.operation_status || ag.primary_status,
+            campaign_external_id: ag.campaign_id ? String(ag.campaign_id) : null,
+          }));
+      } else if (scope === 'ad') {
+        const listData = await apiCall('/ad/get/', decrypted.access_token, {
+          advertiser_id: decrypted.advertiser_id,
+          page_size: 1000,
+        });
+        map['__items__'] = (listData.list || [])
+          .filter(ad => map[String(ad.ad_id)] !== undefined)
+          .map(ad => ({
+            external_id: String(ad.ad_id),
+            name: ad.ad_name,
+            status: ad.operation_status || ad.primary_status,
+            campaign_external_id: ad.campaign_id ? String(ad.campaign_id) : null,
+          }));
+      }
+    } catch (listErr) {
+      logger.warn(`TikTok getAllScopeMetrics: không lấy được metadata items: ${listErr.message}`);
+    }
+
     return map;
   } catch (err) {
     logger.error(`TikTok getAllScopeMetrics (${scope}) error:`, err.message);
