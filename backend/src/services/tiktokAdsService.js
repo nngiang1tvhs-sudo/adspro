@@ -605,9 +605,10 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       data_level: dataLevel,
       dimensions: JSON.stringify([dimension]),
       metrics: JSON.stringify([
-        'spend', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm',
+        'spend', 'impressions', 'reach', 'clicks', 'ctr', 'cpc', 'cpm',
         'conversion', 'cost_per_conversion',
         'video_play_actions', 'result', 'cost_per_result', 'result_rate',
+        'follows',
       ]),
       start_date: startDate,
       end_date: endDate,
@@ -621,6 +622,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       map[id] = {
         spend:           n(m.spend),
         impressions:     n(m.impressions),
+        reach:           n(m.reach),
         clicks:          n(m.clicks),
         ctr:             n(m.ctr),
         cpc:             n(m.cpc),
@@ -630,7 +632,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         video_views:     n(m.video_play_actions),
         result:          n(m.result),
         cost_per_result: n(m.cost_per_result),
-        follows:         0,
+        follows:         n(m.follows),
       };
     });
 

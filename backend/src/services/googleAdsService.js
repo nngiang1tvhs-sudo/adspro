@@ -377,19 +377,21 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     else if (dateRange.from && dateRange.to) dateFilter = `AND segments.date BETWEEN '${dateRange.from}' AND '${dateRange.to}'`;
 
     const buildM = (row) => ({
-      impressions: Number(row.metrics?.impressions || 0),
-      clicks:      Number(row.metrics?.clicks || 0),
-      ctr:         Number(row.metrics?.ctr || 0),
-      cpc:         row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
-      spend:       row.metrics?.cost_micros  ? Number(row.metrics.cost_micros) / 1000000 : 0,
-      video_views: Number(row.metrics?.video_views || 0),
-      cpv:         row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
-      conversions: Number(row.metrics?.conversions || 0),
-      cpa:         Number(row.metrics?.cost_per_conversion || 0) / 1000000,
-      result:      Number(row.metrics?.video_views || row.metrics?.conversions || 0),
-      cost_per_result: row.metrics?.average_cpv
+      impressions:      Number(row.metrics?.impressions || 0),
+      clicks:           Number(row.metrics?.clicks || 0),
+      ctr:              Number(row.metrics?.ctr || 0),
+      cpc:              row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
+      spend:            row.metrics?.cost_micros  ? Number(row.metrics.cost_micros) / 1000000 : 0,
+      video_views:      Number(row.metrics?.video_views || 0),
+      cpv:              row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+      conversions:      Number(row.metrics?.conversions || 0),
+      cpa:              Number(row.metrics?.cost_per_conversion || 0) / 1000000,
+      result:           Number(row.metrics?.video_views || row.metrics?.conversions || 0),
+      cost_per_result:  row.metrics?.average_cpv
         ? Number(row.metrics.average_cpv) / 1000000
         : Number(row.metrics?.cost_per_conversion || 0) / 1000000,
+      engagements:      Number(row.metrics?.engagements || 0),
+      impression_share: Number(row.metrics?.search_impression_share || 0),
     });
 
     const map = {};
@@ -398,7 +400,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         `SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id AS campaign_id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
-                metrics.cost_per_conversion
+                metrics.cost_per_conversion, metrics.engagements, metrics.search_impression_share
          FROM ad_group
          WHERE ad_group.status != 'REMOVED' ${dateFilter}`
       );
@@ -418,7 +420,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.campaign_id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
-                metrics.cost_per_conversion
+                metrics.cost_per_conversion, metrics.engagements
          FROM ad_group_ad
          WHERE ad_group_ad.status != 'REMOVED' ${dateFilter}`
       );

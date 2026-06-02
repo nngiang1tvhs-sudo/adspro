@@ -456,7 +456,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         'id', 'name', 'status', 'effective_status',
         scope === 'ad_group' ? 'optimization_goal' : null,
         'campaign_id',
-        `insights.${insightsTimeParam}{spend,impressions,reach,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
       ].filter(Boolean).join(','),
       limit: 500,
     });
@@ -480,8 +480,12 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         cost_per_result: fbResult.cost_per_result,
         conversions:     fbResult.result,
         cpa:             fbResult.cost_per_result,
+        frequency:       Number(insights.frequency || 0),
         engagements:     actions.post_engagement || 0,
         messages:        actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
+        page_likes:      actions.like || 0,
+        video_2s_views:  actions.video_view || 0,
+        purchases:       actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
       };
     });
     // Attach item metadata so rulesEngine can build targets without DB lookup
