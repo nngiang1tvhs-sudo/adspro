@@ -184,13 +184,15 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
       case 'pause':
       case 'tat':
       case 'turn_off': {
-        if (service.toggleObjectStatus) {
-          await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
-        } else {
-          await service.toggleCampaignStatus(account.credentials, object.external_id, false);
-        }
+        let apiErr = null;
+        try {
+          if (service.toggleObjectStatus) {
+            await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
+          } else {
+            await service.toggleCampaignStatus(account.credentials, object.external_id, false);
+          }
+        } catch (e) { apiErr = e; }
         // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
-        // ad_group/ad scope dùng external_id làm id proxy nên UPDATE có thể không khớp, bỏ qua lỗi
         try {
           if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
           else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
@@ -201,17 +203,21 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
         }
+        if (apiErr) return { success: false, action: 'pause', message: apiErr.message };
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
       }
 
       case 'enable':
       case 'bat':
       case 'turn_on': {
-        if (service.toggleObjectStatus) {
-          await service.toggleObjectStatus(account.credentials, object.external_id, object.type, true);
-        } else {
-          await service.toggleCampaignStatus(account.credentials, object.external_id, true);
-        }
+        let apiErr = null;
+        try {
+          if (service.toggleObjectStatus) {
+            await service.toggleObjectStatus(account.credentials, object.external_id, object.type, true);
+          } else {
+            await service.toggleCampaignStatus(account.credentials, object.external_id, true);
+          }
+        } catch (e) { apiErr = e; }
         const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
         try {
           if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
@@ -223,6 +229,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
         }
+        if (apiErr) return { success: false, action: 'enable', message: apiErr.message };
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
       }
 
