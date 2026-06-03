@@ -111,7 +111,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
         'id', 'name', 'status', 'effective_status', 'objective', 'buying_type',
         'daily_budget', 'lifetime_budget', 'budget_remaining', 'bid_strategy',
         'created_time', 'updated_time', 'start_time', 'stop_time',
-        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,action_values,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,inline_link_clicks,cost_per_inline_link_click,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,purchase_roas,website_purchase_roas,mobile_app_purchase_roas}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,action_values,video_continuous_2_sec_watched_actions,video_p25_watched_actions,video_p50_watched_actions,video_p75_watched_actions,video_p100_watched_actions,inline_link_clicks,cost_per_inline_link_click,quality_ranking,engagement_rate_ranking,conversion_rate_ranking,purchase_roas,website_purchase_roas,mobile_app_purchase_roas}`,
       ].join(','),
       limit: 200,
     });
@@ -153,7 +153,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
           engagements: actions.post_engagement || 0,
-          video_2s_views: actions.video_view || 0,
+          video_2s_views: Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
           purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
           quality_ranking: insights.quality_ranking,
@@ -456,7 +456,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         'id', 'name', 'status', 'effective_status',
         scope === 'ad_group' ? 'optimization_goal' : null,
         'campaign_id',
-        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click}`,
+        `insights.${insightsTimeParam}{spend,impressions,reach,frequency,clicks,ctr,cpc,cpm,conversions,cost_per_conversion,actions,inline_link_clicks,cost_per_inline_link_click,video_continuous_2_sec_watched_actions}`,
       ].filter(Boolean).join(','),
       limit: 500,
     });
@@ -484,7 +484,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         engagements:     actions.post_engagement || 0,
         messages:        actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
         page_likes:      actions.like || 0,
-        video_2s_views:  actions.video_view || 0,
+        video_2s_views:  Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
         purchases:       actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
       };
     });
