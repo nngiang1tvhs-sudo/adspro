@@ -184,16 +184,20 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
       case 'pause':
       case 'tat':
       case 'turn_off': {
-        const toggleFn = service.toggleObjectStatus || service.toggleCampaignStatus;
         if (service.toggleObjectStatus) {
           await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
         } else {
           await service.toggleCampaignStatus(account.credentials, object.external_id, false);
         }
-        // Cập nhật status trong DB theo bảng tương ứng
-        if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
-        else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
-        else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
+        // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
+        // ad_group/ad scope dùng external_id làm id proxy nên UPDATE có thể không khớp, bỏ qua lỗi
+        try {
+          if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
+          else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
+          else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
+        } catch (dbErr) {
+          logger.warn(`Cache DB update skipped [pause ${object.type}]: ${dbErr.message}`);
+        }
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
         }
@@ -209,9 +213,13 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           await service.toggleCampaignStatus(account.credentials, object.external_id, true);
         }
         const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
-        if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
-        else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
-        else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
+        try {
+          if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
+          else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
+          else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
+        } catch (dbErr) {
+          logger.warn(`Cache DB update skipped [enable ${object.type}]: ${dbErr.message}`);
+        }
         if (rule.email_notify) {
           await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
         }
