@@ -261,6 +261,8 @@ const getCampaigns = async (credentials, dateRange = {}) => {
           result: n(m.result),
           cost_per_result: n(m.cost_per_result),
           result_rate: n(m.result_rate),
+          cpv: n(m.video_play_actions) > 0 ? n(m.spend) / n(m.video_play_actions) : 0,
+          cpf: n(m.follows) > 0 ? n(m.spend) / n(m.follows) : 0,
         },
         raw_data: { ...camp, insights: m },
       };
@@ -405,6 +407,8 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
           result: n(m.result),
           cost_per_result: n(m.cost_per_result),
           result_rate: n(m.result_rate),
+          cpv: n(m.video_play_actions) > 0 ? n(m.spend) / n(m.video_play_actions) : 0,
+          cpf: n(m.follows) > 0 ? n(m.spend) / n(m.follows) : 0,
         },
         raw_data: ag,
       };
@@ -515,6 +519,8 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
           result: n(m.result),
           cost_per_result: n(m.cost_per_result),
           result_rate: n(m.result_rate),
+          cpv: n(m.video_play_actions) > 0 ? n(m.spend) / n(m.video_play_actions) : 0,
+          cpf: n(m.follows) > 0 ? n(m.spend) / n(m.follows) : 0,
         },
         raw_data: ad,
       };
@@ -633,6 +639,8 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         result:          n(m.result),
         cost_per_result: n(m.cost_per_result),
         follows:         n(m.follows),
+        cpv: n(m.video_play_actions) > 0 ? n(m.spend) / n(m.video_play_actions) : 0,
+        cpf: n(m.follows) > 0 ? n(m.spend) / n(m.follows) : 0,
       };
     });
 

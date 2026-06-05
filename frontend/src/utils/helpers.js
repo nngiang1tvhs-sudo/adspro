@@ -170,6 +170,8 @@ export const DEFAULT_COLUMNS = {
     { key: 'spend', label: 'Chi phí', visible: true, format: 'currency', pinned: true },
     { key: 'video_views', label: 'Video views', visible: true, format: 'number' },
     { key: 'follows', label: 'Follow', visible: true, format: 'number' },
+    { key: 'cpv', label: 'CPV', visible: false, format: 'currency' },
+    { key: 'cpf', label: 'CPF', visible: false, format: 'currency' },
     { key: 'result', label: 'Kết quả', visible: true, format: 'number', pinned: true },
     { key: 'cost_per_result', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
     { key: 'conversions', label: 'Đơn hàng', visible: false, format: 'number' },
