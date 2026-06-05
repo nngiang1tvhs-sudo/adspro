@@ -54,6 +54,8 @@ const METRICS_BY_PLATFORM = {
     { key: 'cpm',             label: 'CPM' },
     { key: 'video_views',     label: 'Lượt xem video' },
     { key: 'follows',         label: 'Follow' },
+    { key: 'cpv',             label: 'CPV (Chi phí/lượt xem)' },
+    { key: 'cpf',             label: 'CPF (Chi phí/follow)' },
     { key: 'result',          label: 'Kết quả' },
     { key: 'cost_per_result', label: 'CP/KQ' },
     { key: 'conversions',     label: 'Đơn hàng' },
