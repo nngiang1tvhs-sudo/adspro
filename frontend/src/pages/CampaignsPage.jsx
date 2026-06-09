@@ -9,35 +9,139 @@ import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, us
 import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, horizontalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
-// Cot mac dinh cho Ad Sets
-const DEFAULT_ADSET_COLUMNS = [
-  { key: 'name', label: 'Nhom QC', visible: true, sticky: true },
-  { key: 'status', label: 'Trang thai', visible: true },
-  { key: 'budget', label: 'Ngan sach', visible: true, format: 'currency' },
-  { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
-  { key: 'reach', label: 'Tiep can', visible: true, format: 'number' },
-  { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
-  { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
-  { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
-  { key: 'cpm', label: 'CPM', visible: true, format: 'currency' },
-  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
-  { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
-  { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
-];
+// Cot mac dinh cho Ad Sets theo platform
+const DEFAULT_ADSET_COLUMNS = {
+  google: [
+    { key: 'name', label: 'Nhom QC', visible: true, sticky: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'budget', label: 'Ngan sach', visible: true, format: 'currency' },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'video_views', label: 'TrueView', visible: true, format: 'number' },
+    { key: 'cpv', label: 'CPV', visible: true, format: 'currency' },
+    { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'roas', label: 'ROAS', visible: true, format: 'roas' },
+    { key: 'cpm', label: 'CPM', visible: false, format: 'currency' },
+  ],
+  facebook: [
+    { key: 'name', label: 'Nhom QC', visible: true, sticky: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'budget', label: 'Ngan sach', visible: true, format: 'currency' },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'reach', label: 'Tiep can', visible: true, format: 'number' },
+    { key: 'frequency', label: 'Tan suat', visible: false, format: 'decimal' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'cpm', label: 'CPM', visible: true, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'roas', label: 'ROAS', visible: true, format: 'roas' },
+    { key: 'messages', label: 'Tin nhan', visible: false, format: 'number' },
+    { key: 'cpp_mess', label: 'CP/Mess', visible: false, format: 'currency' },
+    { key: 'page_likes', label: 'Follow', visible: false, format: 'number' },
+    { key: 'cpp_follow', label: 'CP/Follow', visible: false, format: 'currency' },
+    { key: 'post_engagements', label: 'Tuong tac', visible: false, format: 'number' },
+    { key: 'video_2s_views', label: 'Video 2s', visible: false, format: 'number' },
+    { key: 'purchases', label: 'Don hang', visible: false, format: 'number' },
+  ],
+  tiktok: [
+    { key: 'name', label: 'Nhom QC', visible: true, sticky: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'budget', label: 'Ngan sach', visible: true, format: 'currency' },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'reach', label: 'Tiep can', visible: false, format: 'number' },
+    { key: 'frequency', label: 'Tan suat', visible: false, format: 'decimal' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'cpm', label: 'CPM', visible: false, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'video_views', label: 'Video views', visible: true, format: 'number' },
+    { key: 'follows', label: 'Follow', visible: true, format: 'number' },
+    { key: 'likes', label: 'Likes', visible: false, format: 'number' },
+    { key: 'comments', label: 'Comments', visible: false, format: 'number' },
+    { key: 'shares', label: 'Shares', visible: false, format: 'number' },
+    { key: 'cpv', label: 'CPV', visible: false, format: 'currency' },
+    { key: 'cpf', label: 'CPF', visible: false, format: 'currency' },
+    { key: 'result', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cost_per_result', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'conversions', label: 'Don hang', visible: false, format: 'number' },
+    { key: 'cpa', label: 'CPA', visible: false, format: 'currency' },
+  ],
+};
 
-// Cot mac dinh cho Ads
-const DEFAULT_AD_COLUMNS = [
-  { key: 'name', label: 'Quang cao', visible: true, sticky: true },
-  { key: 'preview', label: 'Hinh/Video', visible: true },
-  { key: 'status', label: 'Trang thai', visible: true },
-  { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
-  { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
-  { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
-  { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
-  { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
-  { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
-  { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
-];
+// Cot mac dinh cho Ads theo platform
+const DEFAULT_AD_COLUMNS = {
+  google: [
+    { key: 'name', label: 'Quang cao', visible: true, sticky: true },
+    { key: 'preview', label: 'Hinh/Video', visible: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'video_views', label: 'TrueView', visible: true, format: 'number' },
+    { key: 'cpv', label: 'CPV', visible: true, format: 'currency' },
+    { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'roas', label: 'ROAS', visible: true, format: 'roas' },
+    { key: 'cpm', label: 'CPM', visible: false, format: 'currency' },
+  ],
+  facebook: [
+    { key: 'name', label: 'Quang cao', visible: true, sticky: true },
+    { key: 'preview', label: 'Hinh/Video', visible: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'reach', label: 'Tiep can', visible: true, format: 'number' },
+    { key: 'frequency', label: 'Tan suat', visible: false, format: 'decimal' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'cpm', label: 'CPM', visible: true, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'conversions', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cpa', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'roas', label: 'ROAS', visible: true, format: 'roas' },
+    { key: 'messages', label: 'Tin nhan', visible: false, format: 'number' },
+    { key: 'cpp_mess', label: 'CP/Mess', visible: false, format: 'currency' },
+    { key: 'page_likes', label: 'Follow', visible: false, format: 'number' },
+    { key: 'cpp_follow', label: 'CP/Follow', visible: false, format: 'currency' },
+    { key: 'post_engagements', label: 'Tuong tac', visible: false, format: 'number' },
+    { key: 'video_2s_views', label: 'Video 2s', visible: false, format: 'number' },
+    { key: 'purchases', label: 'Don hang', visible: false, format: 'number' },
+  ],
+  tiktok: [
+    { key: 'name', label: 'Quang cao', visible: true, sticky: true },
+    { key: 'preview', label: 'Hinh/Video', visible: true },
+    { key: 'status', label: 'Trang thai', visible: true },
+    { key: 'impressions', label: 'Hien thi', visible: true, format: 'number' },
+    { key: 'reach', label: 'Tiep can', visible: false, format: 'number' },
+    { key: 'frequency', label: 'Tan suat', visible: false, format: 'decimal' },
+    { key: 'clicks', label: 'Luot nhap', visible: true, format: 'number' },
+    { key: 'ctr', label: 'CTR', visible: true, format: 'percent' },
+    { key: 'cpc', label: 'CPC', visible: true, format: 'currency' },
+    { key: 'cpm', label: 'CPM', visible: false, format: 'currency' },
+    { key: 'spend', label: 'Chi phi', visible: true, format: 'currency', pinned: true },
+    { key: 'video_views', label: 'Video views', visible: true, format: 'number' },
+    { key: 'follows', label: 'Follow', visible: true, format: 'number' },
+    { key: 'likes', label: 'Likes', visible: false, format: 'number' },
+    { key: 'comments', label: 'Comments', visible: false, format: 'number' },
+    { key: 'shares', label: 'Shares', visible: false, format: 'number' },
+    { key: 'cpv', label: 'CPV', visible: false, format: 'currency' },
+    { key: 'cpf', label: 'CPF', visible: false, format: 'currency' },
+    { key: 'result', label: 'Ket qua', visible: true, format: 'number', pinned: true },
+    { key: 'cost_per_result', label: 'CP/KQ', visible: true, format: 'currency', pinned: true },
+    { key: 'conversions', label: 'Don hang', visible: false, format: 'number' },
+    { key: 'cpa', label: 'CPA', visible: false, format: 'currency' },
+  ],
+};
 
 // Sortable column header
 function SortableHeader({ col, sortKey, sortDir, onSort }) {
@@ -91,8 +195,8 @@ export default function CampaignsPage() {
   const [drillLoading, setDrillLoading] = useState(false);
 
   // Drill-down column settings
-  const [adsetColumns, setAdsetColumns] = useState(DEFAULT_ADSET_COLUMNS);
-  const [adColumns, setAdColumns] = useState(DEFAULT_AD_COLUMNS);
+  const [adsetColumns, setAdsetColumns] = useState(DEFAULT_ADSET_COLUMNS.google);
+  const [adColumns, setAdColumns] = useState(DEFAULT_AD_COLUMNS.google);
   const [showDrillColSettings, setShowDrillColSettings] = useState(false);
 
   // Sort
@@ -106,9 +210,12 @@ export default function CampaignsPage() {
 
   useEffect(() => {
     setColumns(DEFAULT_COLUMNS[platform]);
+    setAdsetColumns(DEFAULT_ADSET_COLUMNS[platform]);
+    setAdColumns(DEFAULT_AD_COLUMNS[platform]);
     setActivePreset('default');
     setGroupName('');
     setAccountId('');
+    setDrillDown(null);
     loadAccounts();
     loadPresets();
   }, [platform]);
@@ -296,11 +403,11 @@ export default function CampaignsPage() {
   };
 
   const toggleAdsetColumn = (key) => {
-    setAdsetColumns(adsetColumns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
+    setAdsetColumns(adsetColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c));
   };
 
   const toggleAdColumn = (key) => {
-    setAdColumns(adColumns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
+    setAdColumns(adColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c));
   };
 
   // === DRILL-DOWN FUNCTIONS ===
