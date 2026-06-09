@@ -337,11 +337,83 @@ const listTargets = asyncHandler(async (req, res) => {
   return success(res, { targets: result.rows });
 });
 
+/**
+ * POST /api/campaigns/ad-groups/:externalId/toggle
+ * Bật/tắt nhóm quảng cáo
+ */
+const toggleAdGroup = asyncHandler(async (req, res) => {
+  const { externalId } = req.params;
+  const { enable, account_id } = req.body;
+
+  const accountResult = await query(
+    'SELECT id, platform, credentials, account_name FROM ad_accounts WHERE id = $1 AND user_id = $2',
+    [account_id, req.user.id]
+  );
+
+  if (accountResult.rowCount === 0) {
+    return error(res, 'Không tìm thấy tài khoản', 404);
+  }
+
+  const account = accountResult.rows[0];
+  const service = getService(account.platform);
+
+  await service.toggleObjectStatus(account.credentials, externalId, 'ad_group', enable);
+
+  await logEvent({
+    userId: req.user.id,
+    accountId: account_id,
+    eventType: EVENT_TYPES.CAMPAIGN_TOGGLE,
+    level: 'success',
+    message: `${enable ? 'Bật' : 'Tắt'} nhóm quảng cáo: ${externalId}`,
+    details: { external_id: externalId, scope: 'ad_group', enable },
+    ipAddress: req.ip,
+  });
+
+  return success(res, { enable }, `${enable ? 'Đã bật' : 'Đã tắt'} nhóm quảng cáo`);
+});
+
+/**
+ * POST /api/campaigns/ads/:externalId/toggle
+ * Bật/tắt quảng cáo
+ */
+const toggleAd = asyncHandler(async (req, res) => {
+  const { externalId } = req.params;
+  const { enable, account_id } = req.body;
+
+  const accountResult = await query(
+    'SELECT id, platform, credentials, account_name FROM ad_accounts WHERE id = $1 AND user_id = $2',
+    [account_id, req.user.id]
+  );
+
+  if (accountResult.rowCount === 0) {
+    return error(res, 'Không tìm thấy tài khoản', 404);
+  }
+
+  const account = accountResult.rows[0];
+  const service = getService(account.platform);
+
+  await service.toggleObjectStatus(account.credentials, externalId, 'ad', enable);
+
+  await logEvent({
+    userId: req.user.id,
+    accountId: account_id,
+    eventType: EVENT_TYPES.CAMPAIGN_TOGGLE,
+    level: 'success',
+    message: `${enable ? 'Bật' : 'Tắt'} quảng cáo: ${externalId}`,
+    details: { external_id: externalId, scope: 'ad', enable },
+    ipAddress: req.ip,
+  });
+
+  return success(res, { enable }, `${enable ? 'Đã bật' : 'Đã tắt'} quảng cáo`);
+});
+
 module.exports = {
   listCampaigns,
   listAdGroups,
   listAds,
   toggleCampaign,
+  toggleAdGroup,
+  toggleAd,
   syncCampaigns,
   listTargets,
 };

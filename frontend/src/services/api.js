@@ -67,6 +67,8 @@ export const campaignsApi = {
   getAdGroups: (campaignId, params) => api.get(`/campaigns/${campaignId}/ad-groups`, { params }),
   getAds: (adGroupId, params) => api.get(`/campaigns/ad-groups/${adGroupId}/ads`, { params }),
   toggle: (id, enable) => api.post(`/campaigns/${id}/toggle`, { enable }),
+  toggleAdGroup: (externalId, accountId, enable) => api.post(`/campaigns/ad-groups/${externalId}/toggle`, { enable, account_id: accountId }),
+  toggleAd: (externalId, accountId, enable) => api.post(`/campaigns/ads/${externalId}/toggle`, { enable, account_id: accountId }),
   sync: (accountId) => api.post('/campaigns/sync', { account_id: accountId }),
   getTargets: (params) => api.get('/campaigns/targets', { params }),
 };

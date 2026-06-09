@@ -34,6 +34,8 @@ router.get('/campaigns/targets', authenticate, campaignsController.listTargets);
 router.get('/campaigns/:id/ad-groups', authenticate, campaignsController.listAdGroups);
 router.get('/campaigns/ad-groups/:adGroupId/ads', authenticate, campaignsController.listAds);
 router.post('/campaigns/:id/toggle', authenticate, campaignsController.toggleCampaign);
+router.post('/campaigns/ad-groups/:externalId/toggle', authenticate, campaignsController.toggleAdGroup);
+router.post('/campaigns/ads/:externalId/toggle', authenticate, campaignsController.toggleAd);
 router.post('/campaigns/sync', authenticate, campaignsController.syncCampaigns);
 
 // ===== RULES =====

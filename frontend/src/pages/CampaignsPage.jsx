@@ -316,6 +316,31 @@ export default function CampaignsPage() {
     }
   };
 
+  const handleToggleAdGroup = async (ag) => {
+    const isActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(String(ag.status || '').toUpperCase());
+    const newEnable = !isActive;
+    try {
+      await campaignsApi.toggleAdGroup(ag.external_id, drillDown.campaign.account_id, newEnable);
+      toast.success(newEnable ? 'Da bat nhom quang cao' : 'Da tat nhom quang cao');
+      // Reload drill data
+      await drillToAdGroups(drillDown.campaign);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
+  const handleToggleAd = async (ad, currentDrillDown) => {
+    const isActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(String(ad.status || '').toUpperCase());
+    const newEnable = !isActive;
+    try {
+      await campaignsApi.toggleAd(ad.external_id, currentDrillDown.campaign.account_id, newEnable);
+      toast.success(newEnable ? 'Da bat quang cao' : 'Da tat quang cao');
+      await drillToAds(currentDrillDown.adGroup);
+    } catch (err) {
+      toast.error(err.message);
+    }
+  };
+
   // === COLUMN PRESET FUNCTIONS ===
   const handleSavePreset = async () => {
     if (!newPresetName.trim()) {
@@ -501,7 +526,18 @@ export default function CampaignsPage() {
     }
     if (col.key === 'status') {
       const badge = getStatusBadge(ag.status);
-      return <span className={`badge ${badge.class}`}>{badge.label}</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className={`badge ${badge.class}`}>{badge.label}</span>
+          <button
+            onClick={() => handleToggleAdGroup(ag)}
+            className="text-slate-400 hover:text-blue-500 p-0.5"
+            title="Bat/Tat nhom quang cao"
+          >
+            <Power size={14} />
+          </button>
+        </div>
+      );
     }
     if (col.key === 'budget') {
       return formatCellValue(ag.budget, 'currency', currency);
@@ -510,7 +546,7 @@ export default function CampaignsPage() {
     return formatCellValue(value, col.format, currency);
   };
 
-  const renderAdCell = (ad, col, currency) => {
+  const renderAdCell = (ad, col, currency, currentDrillDown) => {
     if (col.key === 'name') {
       return (
         <div>
@@ -527,7 +563,18 @@ export default function CampaignsPage() {
     }
     if (col.key === 'status') {
       const badge = getStatusBadge(ad.status);
-      return <span className={`badge ${badge.class}`}>{badge.label}</span>;
+      return (
+        <div className="flex items-center gap-2">
+          <span className={`badge ${badge.class}`}>{badge.label}</span>
+          <button
+            onClick={() => handleToggleAd(ad, currentDrillDown)}
+            className="text-slate-400 hover:text-blue-500 p-0.5"
+            title="Bat/Tat quang cao"
+          >
+            <Power size={14} />
+          </button>
+        </div>
+      );
     }
     const value = ad.metrics?.[col.key];
     return formatCellValue(value, col.format, currency);
@@ -850,7 +897,7 @@ export default function CampaignsPage() {
                     <tr key={ad.external_id} className="hover:bg-slate-50">
                       {adColumns.filter(c => c.visible).map(col => (
                         <td key={col.key} className="px-3 py-2.5 border-b border-slate-100 whitespace-nowrap">
-                          {renderAdCell(ad, col, drillDown?.campaign?.currency)}
+                          {renderAdCell(ad, col, drillDown?.campaign?.currency, drillDown)}
                         </td>
                       ))}
                     </tr>
