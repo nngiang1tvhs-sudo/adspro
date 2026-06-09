@@ -611,14 +611,23 @@ export default function CampaignsPage() {
       {drillDown && (
         <div className="flex items-center gap-2 text-sm text-slate-500">
           <button onClick={() => { setDrillDown(null); setShowDrillColSettings(false); }} className="text-blue-600 hover:underline">Chien dich</button>
-          {drillDown.breadcrumb.map((b, i) => (
-            <span key={i} className="flex items-center gap-2">
-              <ChevronRight size={14} />
-              <span className={i === drillDown.breadcrumb.length - 1 ? 'text-slate-700' : 'text-blue-600 cursor-pointer hover:underline'}>
-                {b}
+          {drillDown.breadcrumb.map((b, i) => {
+            const isLast = i === drillDown.breadcrumb.length - 1;
+            const handleBreadcrumbClick = !isLast && drillDown.type === 'ads' && i === 0
+              ? () => drillToAdGroups(drillDown.campaign)
+              : undefined;
+            return (
+              <span key={i} className="flex items-center gap-2">
+                <ChevronRight size={14} />
+                <span
+                  className={isLast ? 'text-slate-700' : 'text-blue-600 cursor-pointer hover:underline'}
+                  onClick={handleBreadcrumbClick}
+                >
+                  {b}
+                </span>
               </span>
-            </span>
-          ))}
+            );
+          })}
           <span className="ml-auto flex items-center gap-2">
             <span className="text-xs">{drillDown.type === 'ad_groups' ? 'Nhom quang cao' : 'Quang cao'}</span>
             <button
