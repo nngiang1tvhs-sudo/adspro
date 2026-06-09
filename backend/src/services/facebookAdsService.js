@@ -441,8 +441,10 @@ const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
   try {
     const decrypted = decryptCredentials(credentials);
     const newStatus = enable ? 'ACTIVE' : 'PAUSED';
-    await axios.post(`${BASE_URL}/${externalId}`, null, {
-      params: { access_token: decrypted.access_token, status: newStatus },
+    // Gửi dạng form-encoded body — Facebook Graph API yêu cầu với ad/adset level
+    const body = new URLSearchParams({ access_token: decrypted.access_token, status: newStatus });
+    await axios.post(`${BASE_URL}/${externalId}`, body, {
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       timeout: 30000,
     });
     return { success: true };
