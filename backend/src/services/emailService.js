@@ -516,6 +516,91 @@ const sendRuleNotification = async ({ ruleName, objectName, objectType, platform
 };
 
 /**
+ * Cảnh báo lỗi đồng bộ tài khoản
+ */
+const sendSyncErrorAlert = async ({ userId, accountName, platform, errorMessage, accountId }) => {
+  try {
+    // Kiểm tra user có bật cảnh báo lỗi đồng bộ không
+    const settingsResult = await query(
+      'SELECT sync_error_alert_enabled, email_primary, email_secondary FROM user_settings WHERE user_id = $1',
+      [userId]
+    );
+    if (settingsResult.rowCount === 0) return { success: false };
+    const settings = settingsResult.rows[0];
+    if (!settings.sync_error_alert_enabled) return { success: false, message: 'Tắt cảnh báo lỗi đồng bộ' };
+
+    const emails = [];
+    if (settings.email_primary) emails.push(settings.email_primary);
+    if (settings.email_secondary) emails.push(settings.email_secondary);
+    if (emails.length === 0) return { success: false, message: 'Chưa cài đặt email' };
+
+    const PLATFORM_CFG = {
+      google:   { label: 'Google Ads',   color: '#34A853', icon: '▲' },
+      facebook: { label: 'Facebook Ads', color: '#1877F2', icon: 'f' },
+      tiktok:   { label: 'TikTok Ads',   color: '#010101', icon: '♪' },
+    };
+    const cfg = PLATFORM_CFG[platform] || { label: platform, color: '#6B7280', icon: '!' };
+
+    const appUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+    const connectUrl = `${appUrl}/connect`;
+
+    const html = `<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>Lỗi đồng bộ tài khoản</title></head>
+<body style="margin:0;padding:0;background:#F2F4F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
+<div style="max-width:520px;margin:0 auto;padding:24px 16px;">
+<div style="border-radius:14px;overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,0.08);">
+
+  <div style="background:#DC2626;padding:18px 22px;">
+    <div style="font-size:10px;color:rgba(255,255,255,0.7);text-transform:uppercase;letter-spacing:1.5px;margin-bottom:5px;">Cảnh báo hệ thống</div>
+    <div style="color:#FFFFFF;font-size:18px;font-weight:700;">⚠️ Lỗi đồng bộ tài khoản</div>
+    <div style="color:rgba(255,255,255,0.8);font-size:13px;margin-top:4px;">Rule tự động có thể bị ảnh hưởng</div>
+  </div>
+
+  <div style="background:#FFFFFF;padding:22px;">
+    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:14px 16px;margin-bottom:18px;">
+      <div style="font-size:11px;color:#991B1B;font-weight:600;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:6px;">Chi tiết lỗi</div>
+      <div style="font-size:13px;color:#7F1D1D;font-family:monospace;">${errorMessage}</div>
+    </div>
+
+    <div style="background:#F8FAFC;border-radius:8px;padding:14px 16px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:8px;background:${cfg.color};text-align:center;line-height:36px;color:#FFF;font-weight:700;font-size:15px;flex-shrink:0;">${cfg.icon}</div>
+        <div>
+          <div style="font-size:15px;font-weight:700;color:#1E293B;">${accountName}</div>
+          <div style="font-size:12px;color:#64748B;margin-top:2px;">${cfg.label}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="text-align:center;margin-bottom:8px;">
+      <a href="${connectUrl}" style="display:inline-block;background:#2563EB;color:#FFFFFF;text-decoration:none;padding:12px 28px;border-radius:8px;font-size:14px;font-weight:600;">Kết nối lại tài khoản →</a>
+    </div>
+    <div style="text-align:center;font-size:11px;color:#94A3B8;">Nhấn vào nút trên để vào trang kết nối và test lại thủ công</div>
+  </div>
+
+  <div style="background:#F8FAFC;padding:12px 22px;border-top:1px solid #E8ECF0;">
+    <div style="font-size:12px;color:#94A3B8;">Thời gian: ${dayjs().format('HH:mm DD/MM/YYYY')} &nbsp;·&nbsp; AdsPro Tự động</div>
+  </div>
+
+</div>
+</div>
+</body>
+</html>`;
+
+    return await sendEmail({
+      to: emails,
+      subject: `[AdsPro] ⚠️ Lỗi đồng bộ: ${accountName}`,
+      html,
+      userId,
+    });
+  } catch (err) {
+    logger.error('sendSyncErrorAlert error:', err.message);
+    return { success: false, message: err.message };
+  }
+};
+
+/**
  * Test email
  */
 const sendTestEmail = async (userId, toEmail) => {
@@ -544,5 +629,6 @@ module.exports = {
   sendEmail,
   sendDailyReport,
   sendRuleNotification,
+  sendSyncErrorAlert,
   sendTestEmail,
 };

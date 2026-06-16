@@ -2,6 +2,7 @@ const { query, transaction } = require('../config/database');
 const { getService } = require('./platformService');
 const logger = require('../utils/logger');
 const { logEvent, EVENT_TYPES } = require('../utils/audit');
+const { sendSyncErrorAlert } = require('./emailService');
 
 /**
  * Đồng bộ data của 1 tài khoản
@@ -151,6 +152,25 @@ const syncAccount = async (accountId, options = {}) => {
       message: `Đồng bộ thất bại: ${err.message}`,
       details: { error: err.message },
     });
+
+    // Gửi email cảnh báo nếu user bật tính năng này
+    try {
+      const userResult = await query(
+        'SELECT user_id FROM ad_accounts WHERE id = $1',
+        [accountId]
+      );
+      if (userResult.rowCount > 0) {
+        await sendSyncErrorAlert({
+          userId: userResult.rows[0].user_id,
+          accountName: account.account_name,
+          platform: account.platform,
+          errorMessage: err.message,
+          accountId,
+        });
+      }
+    } catch (emailErr) {
+      logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
+    }
   }
 
   const duration = Date.now() - startTime;
