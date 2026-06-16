@@ -368,6 +368,12 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       const campaigns = await getCampaigns(credentials, dateRange);
       const map = {};
       campaigns.forEach(c => { map[String(c.external_id)] = c.metrics; });
+      map['__items__'] = campaigns.map(c => ({
+        external_id: String(c.external_id),
+        name: c.name,
+        status: c.status,
+        campaign_external_id: null,
+      }));
       return map;
     }
 

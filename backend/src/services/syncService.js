@@ -195,7 +195,9 @@ const syncAllAccounts = async () => {
   logger.info(`Bắt đầu đồng bộ ${accounts.rowCount} tài khoản`);
 
   const results = [];
-  for (const account of accounts.rows) {
+  for (let i = 0; i < accounts.rows.length; i++) {
+    const account = accounts.rows[i];
+    if (i > 0) await new Promise(r => setTimeout(r, 3000)); // 3s delay giữa các account
     try {
       const result = await syncAccount(account.id);
       results.push({ accountId: account.id, ...result });

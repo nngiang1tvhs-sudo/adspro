@@ -394,15 +394,8 @@ const executeRule = async (rule, options = {}) => {
           if (svc.getAllScopeMetrics) {
             const metricsMap = await svc.getAllScopeMetrics(account.credentials, dateRange, rule.scope);
             apiMetricsByRange[tr] = metricsMap;
-            // Cập nhật status map từ API
-            if (rule.scope === 'campaign') {
-              const campaigns = await svc.getCampaigns(account.credentials, dateRange);
-              for (const c of campaigns) {
-                if (!apiStatusMap[String(c.external_id)]) {
-                  apiStatusMap[String(c.external_id)] = c.status;
-                }
-              }
-            } else if (metricsMap['__items__']) {
+            // Cập nhật status map từ __items__ (tránh gọi API thêm lần nữa)
+            if (metricsMap['__items__']) {
               for (const item of metricsMap['__items__']) {
                 if (!apiStatusMap[item.external_id]) apiStatusMap[item.external_id] = item.status;
               }
