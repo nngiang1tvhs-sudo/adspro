@@ -52,7 +52,7 @@ const updateSettings = asyncHandler(async (req, res) => {
 
   // UPSERT
   await query(
-    `INSERT INTO user_settings (user_id) VALUES ($${idx}) ON CONFLICT (user_id) DO NOTHING`,
+    `INSERT INTO user_settings (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`,
     [req.user.id]
   );
 
