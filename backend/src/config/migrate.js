@@ -237,7 +237,7 @@ CREATE TABLE IF NOT EXISTS user_settings (
   weekly_report_enabled BOOLEAN DEFAULT TRUE,
   rule_notification_enabled BOOLEAN DEFAULT TRUE,
   token_expiry_alert_enabled BOOLEAN DEFAULT TRUE,
-  sync_error_alert_enabled BOOLEAN DEFAULT FALSE,
+  sync_error_alert_enabled BOOLEAN DEFAULT TRUE,
   timezone VARCHAR(50) DEFAULT 'Asia/Ho_Chi_Minh',
   email_template TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -314,6 +314,10 @@ BEGIN
       UNIQUE (account_id, campaign_id, date);
   END IF;
 END$$;
+
+-- Bật mặc định cảnh báo lỗi đồng bộ cho user hiện tại (nếu chưa từng set thủ công)
+ALTER TABLE user_settings ALTER COLUMN sync_error_alert_enabled SET DEFAULT TRUE;
+UPDATE user_settings SET sync_error_alert_enabled = TRUE WHERE sync_error_alert_enabled = FALSE;
 
 -- Triggers
 DO $$

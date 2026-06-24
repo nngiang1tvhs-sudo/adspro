@@ -195,7 +195,7 @@ export default function SettingsPage() {
         <SettingRow
           title="Cảnh báo lỗi đồng bộ"
           description="Gửi ngay khi hệ thống không đồng bộ được dữ liệu từ tài khoản"
-          checked={settings.sync_error_alert_enabled === true}
+          checked={settings.sync_error_alert_enabled !== false}
           onChange={v => update('sync_error_alert_enabled', v)}
         />
       </div>
