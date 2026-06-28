@@ -153,6 +153,25 @@ const syncAccount = async (accountId, options = {}) => {
       details: { error: err.message },
     });
 
+    // Gửi email cảnh báo VÀ tự động reconnect song song
+    try {
+      const userResult = await query(
+        'SELECT user_id FROM ad_accounts WHERE id = $1',
+        [accountId]
+      );
+      if (userResult.rowCount > 0) {
+        await sendSyncErrorAlert({
+          userId: userResult.rows[0].user_id,
+          accountName: account.account_name,
+          platform: account.platform,
+          errorMessage: err.message,
+          accountId,
+        });
+      }
+    } catch (emailErr) {
+      logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
+    }
+
     // Tự động test connection lại (giống nhấn nút Test)
     try {
       logger.info(`🔄 Auto-reconnect: Đang thử kết nối lại ${account.account_name}...`);
@@ -175,28 +194,6 @@ const syncAccount = async (accountId, options = {}) => {
       }
     } catch (reconnectErr) {
       logger.warn(`❌ Auto-reconnect exception: ${account.account_name} — ${reconnectErr.message}`);
-    }
-
-    // Gửi email cảnh báo nếu user bật tính năng này (chỉ gửi nếu vẫn lỗi)
-    try {
-      const currentStatus = await query('SELECT status FROM ad_accounts WHERE id = $1', [accountId]);
-      if (currentStatus.rows[0]?.status === 'error') {
-        const userResult = await query(
-          'SELECT user_id FROM ad_accounts WHERE id = $1',
-          [accountId]
-        );
-        if (userResult.rowCount > 0) {
-          await sendSyncErrorAlert({
-            userId: userResult.rows[0].user_id,
-            accountName: account.account_name,
-            platform: account.platform,
-            errorMessage: err.message,
-            accountId,
-          });
-        }
-      }
-    } catch (emailErr) {
-      logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
     }
   }
 
