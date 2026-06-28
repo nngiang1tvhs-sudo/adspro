@@ -143,6 +143,64 @@ const DEFAULT_AD_COLUMNS = {
   ],
 };
 
+// Tinh hang tong tu danh sach items (campaigns/adgroups/ads)
+function computeTotals(items, getBudget, getMetric) {
+  const sum = (key) => items.reduce((s, item) => s + Number(getMetric(item, key) || 0), 0);
+
+  const totalBudget = items.reduce((s, item) => s + Number(getBudget(item) || 0), 0);
+  const totalSpend = sum('spend');
+  const totalImpressions = sum('impressions');
+  const totalClicks = sum('clicks');
+  const totalConversions = sum('conversions');
+  const totalReach = sum('reach');
+  const totalVideoViews = sum('video_views');
+  const totalFollows = sum('follows');
+  const totalMessages = sum('messages');
+  const totalPageLikes = sum('page_likes');
+  const totalEngagements = sum('engagements');
+  const totalPostEngagements = sum('post_engagements');
+  const totalVideo2s = sum('video_2s_views');
+  const totalPurchases = sum('purchases');
+  const totalResult = sum('result');
+  const totalLikes = sum('likes');
+  const totalComments = sum('comments');
+  const totalShares = sum('shares');
+  const totalConversionValue = sum('conversion_value');
+
+  return {
+    budget: totalBudget,
+    spend: totalSpend,
+    impressions: totalImpressions,
+    clicks: totalClicks,
+    conversions: totalConversions,
+    reach: totalReach,
+    video_views: totalVideoViews,
+    follows: totalFollows,
+    messages: totalMessages,
+    page_likes: totalPageLikes,
+    engagements: totalEngagements,
+    post_engagements: totalPostEngagements,
+    video_2s_views: totalVideo2s,
+    purchases: totalPurchases,
+    result: totalResult,
+    likes: totalLikes,
+    comments: totalComments,
+    shares: totalShares,
+    ctr: totalImpressions > 0 ? (totalClicks / totalImpressions) * 100 : 0,
+    cpc: totalClicks > 0 ? totalSpend / totalClicks : 0,
+    cpm: totalImpressions > 0 ? (totalSpend / totalImpressions) * 1000 : 0,
+    cpa: totalConversions > 0 ? totalSpend / totalConversions : 0,
+    cpv: totalVideoViews > 0 ? totalSpend / totalVideoViews : 0,
+    cpf: totalFollows > 0 ? totalSpend / totalFollows : 0,
+    cpp_mess: totalMessages > 0 ? totalSpend / totalMessages : 0,
+    cpp_follow: totalPageLikes > 0 ? totalSpend / totalPageLikes : 0,
+    cost_per_result: totalResult > 0 ? totalSpend / totalResult : 0,
+    frequency: totalReach > 0 ? totalImpressions / totalReach : 0,
+    roas: totalSpend > 0 ? totalConversionValue / totalSpend : 0,
+    impression_share: items.length > 0 ? items.reduce((s, item) => s + Number(getMetric(item, 'impression_share') || 0), 0) / items.length : 0,
+  };
+}
+
 // Sortable column header
 function SortableHeader({ col, sortKey, sortDir, onSort }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: col.key });
@@ -834,6 +892,28 @@ export default function CampaignsPage() {
                       </tr>
                     ))}
                   </tbody>
+                  <tfoot>
+                    {(() => {
+                      const totals = computeTotals(
+                        displayCampaigns,
+                        (c) => c.budget,
+                        (c, key) => c.metrics?.[key]
+                      );
+                      const cur = displayCampaigns[0]?.currency;
+                      return (
+                        <tr className="bg-slate-100 font-semibold border-t-2 border-slate-300">
+                          {visibleColumns.map(col => (
+                            <td key={col.key} className="px-3 py-2.5 whitespace-nowrap text-slate-700">
+                              {col.key === 'name' ? 'Tổng' :
+                               col.key === 'status' || col.key === 'objective' ? '' :
+                               col.key === 'budget' ? formatCellValue(totals.budget, 'currency', cur) :
+                               formatCellValue(totals[col.key], col.format, cur)}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })()}
+                  </tfoot>
                 </table>
               </DndContext>
             )}
@@ -869,6 +949,29 @@ export default function CampaignsPage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const visibleAdsetCols = adsetColumns.filter(c => c.visible);
+                    const totals = computeTotals(
+                      drillData,
+                      (ag) => ag.budget,
+                      (ag, key) => ag.metrics?.[key]
+                    );
+                    const cur = drillDown?.campaign?.currency;
+                    return (
+                      <tr className="bg-slate-100 font-semibold border-t-2 border-slate-300">
+                        {visibleAdsetCols.map(col => (
+                          <td key={col.key} className="px-3 py-2.5 whitespace-nowrap text-slate-700">
+                            {col.key === 'name' ? 'Tổng' :
+                             col.key === 'status' ? '' :
+                             col.key === 'budget' ? formatCellValue(totals.budget, 'currency', cur) :
+                             formatCellValue(totals[col.key], col.format, cur)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })()}
+                </tfoot>
               </table>
             )}
           </div>
@@ -903,6 +1006,28 @@ export default function CampaignsPage() {
                     </tr>
                   ))}
                 </tbody>
+                <tfoot>
+                  {(() => {
+                    const visibleAdCols = adColumns.filter(c => c.visible);
+                    const totals = computeTotals(
+                      drillData,
+                      () => 0,
+                      (ad, key) => ad.metrics?.[key]
+                    );
+                    const cur = drillDown?.campaign?.currency;
+                    return (
+                      <tr className="bg-slate-100 font-semibold border-t-2 border-slate-300">
+                        {visibleAdCols.map(col => (
+                          <td key={col.key} className="px-3 py-2.5 whitespace-nowrap text-slate-700">
+                            {col.key === 'name' ? 'Tổng' :
+                             col.key === 'status' || col.key === 'preview' ? '' :
+                             formatCellValue(totals[col.key], col.format, cur)}
+                          </td>
+                        ))}
+                      </tr>
+                    );
+                  })()}
+                </tfoot>
               </table>
             )}
           </div>
