@@ -267,9 +267,16 @@ export default function CampaignsPage() {
   );
 
   useEffect(() => {
-    setColumns(DEFAULT_COLUMNS[platform]);
-    setAdsetColumns(DEFAULT_ADSET_COLUMNS[platform]);
-    setAdColumns(DEFAULT_AD_COLUMNS[platform]);
+    const loadSavedCols = (storageKey, defaults) => {
+      try {
+        const saved = localStorage.getItem(storageKey);
+        if (saved) return JSON.parse(saved);
+      } catch {}
+      return defaults;
+    };
+    setColumns(loadSavedCols(`cols_campaign_${platform}`, DEFAULT_COLUMNS[platform]));
+    setAdsetColumns(loadSavedCols(`cols_adset_${platform}`, DEFAULT_ADSET_COLUMNS[platform]));
+    setAdColumns(loadSavedCols(`cols_ad_${platform}`, DEFAULT_AD_COLUMNS[platform]));
     setActivePreset('default');
     setGroupName('');
     setAccountId('');
@@ -428,6 +435,7 @@ export default function CampaignsPage() {
       const pinnedKeys = new Set(DEFAULT_COLUMNS[platform].filter(c => c.pinned).map(c => c.key));
       const finalCols = savedCols.map(c => pinnedKeys.has(c.key) ? { ...c, visible: true } : c);
       setColumns(finalCols);
+      localStorage.setItem(`cols_campaign_${platform}`, JSON.stringify(finalCols));
       setActivePreset(preset.id);
       toast.success('Da tai nhom cot: ' + preset.preset_name);
     } catch (err) {
@@ -477,20 +485,56 @@ export default function CampaignsPage() {
       const newIdx = visibleColumns.findIndex(c => c.key === over.id);
       const reordered = arrayMove(visibleColumns, oldIdx, newIdx);
       const hiddenCols = columns.filter(c => !c.visible);
-      setColumns([...reordered, ...hiddenCols]);
+      const newCols = [...reordered, ...hiddenCols];
+      setColumns(newCols);
+      localStorage.setItem(`cols_campaign_${platform}`, JSON.stringify(newCols));
+    }
+  };
+
+  const handleAdsetColumnDrag = (event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const vis = adsetColumns.filter(c => c.visible);
+      const oldIdx = vis.findIndex(c => c.key === active.id);
+      const newIdx = vis.findIndex(c => c.key === over.id);
+      const reordered = arrayMove(vis, oldIdx, newIdx);
+      const hidden = adsetColumns.filter(c => !c.visible);
+      const newCols = [...reordered, ...hidden];
+      setAdsetColumns(newCols);
+      localStorage.setItem(`cols_adset_${platform}`, JSON.stringify(newCols));
+    }
+  };
+
+  const handleAdColumnDrag = (event) => {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      const vis = adColumns.filter(c => c.visible);
+      const oldIdx = vis.findIndex(c => c.key === active.id);
+      const newIdx = vis.findIndex(c => c.key === over.id);
+      const reordered = arrayMove(vis, oldIdx, newIdx);
+      const hidden = adColumns.filter(c => !c.visible);
+      const newCols = [...reordered, ...hidden];
+      setAdColumns(newCols);
+      localStorage.setItem(`cols_ad_${platform}`, JSON.stringify(newCols));
     }
   };
 
   const toggleColumn = (key) => {
-    setColumns(columns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c));
+    const newCols = columns.map(c => (c.key === key && !c.pinned) ? { ...c, visible: !c.visible } : c);
+    setColumns(newCols);
+    localStorage.setItem(`cols_campaign_${platform}`, JSON.stringify(newCols));
   };
 
   const toggleAdsetColumn = (key) => {
-    setAdsetColumns(adsetColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c));
+    const newCols = adsetColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c);
+    setAdsetColumns(newCols);
+    localStorage.setItem(`cols_adset_${platform}`, JSON.stringify(newCols));
   };
 
   const toggleAdColumn = (key) => {
-    setAdColumns(adColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c));
+    const newCols = adColumns.map(c => (c.key === key && !c.sticky && !c.pinned) ? { ...c, visible: !c.visible } : c);
+    setAdColumns(newCols);
+    localStorage.setItem(`cols_ad_${platform}`, JSON.stringify(newCols));
   };
 
   // === DRILL-DOWN FUNCTIONS ===
@@ -738,7 +782,7 @@ export default function CampaignsPage() {
           <div className="flex gap-1.5 mb-3 flex-wrap items-center">
             <button
               className={`btn btn-sm ${activePreset === 'default' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'btn-outline'}`}
-              onClick={() => { setColumns(DEFAULT_COLUMNS[platform]); setActivePreset('default'); }}
+              onClick={() => { setColumns(DEFAULT_COLUMNS[platform]); localStorage.removeItem(`cols_campaign_${platform}`); setActivePreset('default'); }}
             >
               Mac dinh
             </button>
@@ -930,13 +974,16 @@ export default function CampaignsPage() {
             ) : drillData.length === 0 ? (
               <div className="text-center py-12 text-slate-400">Khong co nhom quang cao</div>
             ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleAdsetColumnDrag}>
               <table className="w-full text-xs">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {adsetColumns.filter(c => c.visible).map(col => (
-                      <th key={col.key} className="text-left px-3 py-2.5 text-[11px] font-medium text-slate-500 uppercase">{col.label}</th>
-                    ))}
-                  </tr>
+                <thead>
+                  <SortableContext items={adsetColumns.filter(c => c.visible).map(c => c.key)} strategy={horizontalListSortingStrategy}>
+                    <tr>
+                      {adsetColumns.filter(c => c.visible).map(col => (
+                        <SortableHeader key={col.key} col={col} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      ))}
+                    </tr>
+                  </SortableContext>
                 </thead>
                 <tbody>
                   {drillData.map(ag => (
@@ -973,6 +1020,7 @@ export default function CampaignsPage() {
                   })()}
                 </tfoot>
               </table>
+              </DndContext>
             )}
           </div>
         </div>
@@ -987,13 +1035,16 @@ export default function CampaignsPage() {
             ) : drillData.length === 0 ? (
               <div className="text-center py-12 text-slate-400">Khong co quang cao</div>
             ) : (
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleAdColumnDrag}>
               <table className="w-full text-xs">
-                <thead className="bg-slate-50">
-                  <tr>
-                    {adColumns.filter(c => c.visible).map(col => (
-                      <th key={col.key} className="text-left px-3 py-2.5 text-[11px] font-medium text-slate-500 uppercase">{col.label}</th>
-                    ))}
-                  </tr>
+                <thead>
+                  <SortableContext items={adColumns.filter(c => c.visible).map(c => c.key)} strategy={horizontalListSortingStrategy}>
+                    <tr>
+                      {adColumns.filter(c => c.visible).map(col => (
+                        <SortableHeader key={col.key} col={col} sortKey={sortKey} sortDir={sortDir} onSort={handleSort} />
+                      ))}
+                    </tr>
+                  </SortableContext>
                 </thead>
                 <tbody>
                   {drillData.map(ad => (
@@ -1029,6 +1080,7 @@ export default function CampaignsPage() {
                   })()}
                 </tfoot>
               </table>
+              </DndContext>
             )}
           </div>
         </div>
