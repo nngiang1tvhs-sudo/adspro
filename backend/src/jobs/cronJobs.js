@@ -1,6 +1,6 @@
 const cron = require('node-cron');
 const logger = require('../utils/logger');
-const { syncAllAccounts, autoReconnectErrorAccounts } = require('../services/syncService');
+const { syncAllAccounts } = require('../services/syncService');
 const { runAllActiveRules } = require('../services/rulesEngine');
 const { sendDailyReport } = require('../services/emailService');
 const { query } = require('../config/database');
@@ -18,9 +18,6 @@ const startSyncCron = () => {
       const results = await syncAllAccounts();
       const ok = results.filter(r => r.success).length;
       logger.info(`✅ Cron sync: ${ok}/${results.length} thành công`);
-
-      // Tự động reconnect các tài khoản đang lỗi
-      await autoReconnectErrorAccounts();
     } catch (err) {
       logger.error('❌ Cron sync error:', err);
     }
