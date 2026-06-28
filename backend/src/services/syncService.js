@@ -230,4 +230,58 @@ const syncAllAccounts = async () => {
   return results;
 };
 
-module.exports = { syncAccount, syncAllAccounts };
+/**
+ * Tự động reconnect các tài khoản đang lỗi
+ */
+const autoReconnectErrorAccounts = async () => {
+  const errorAccounts = await query(
+    `SELECT id, platform, account_name, credentials FROM ad_accounts WHERE status = 'error'`
+  );
+
+  if (errorAccounts.rowCount === 0) return [];
+
+  logger.info(`🔄 Auto-reconnect: Tìm thấy ${errorAccounts.rowCount} tài khoản lỗi, đang thử kết nối lại...`);
+
+  const results = [];
+  for (const account of errorAccounts.rows) {
+    try {
+      const service = getService(account.platform);
+      const testResult = await service.testConnection(account.credentials);
+
+      if (testResult.success) {
+        await query(
+          `UPDATE ad_accounts SET status = 'active', status_message = NULL,
+           currency = COALESCE($1, currency) WHERE id = $2`,
+          [testResult.data?.currency || null, account.id]
+        );
+
+        await logEvent({
+          accountId: account.id,
+          eventType: EVENT_TYPES.SYNC_SUCCESS,
+          level: 'success',
+          message: `Auto-reconnect thành công: ${account.account_name}`,
+        });
+
+        logger.info(`✅ Auto-reconnect OK: ${account.account_name}`);
+        results.push({ accountId: account.id, name: account.account_name, reconnected: true });
+      } else {
+        logger.warn(`❌ Auto-reconnect vẫn lỗi: ${account.account_name} - ${testResult.message}`);
+        results.push({ accountId: account.id, name: account.account_name, reconnected: false, error: testResult.message });
+      }
+    } catch (err) {
+      logger.warn(`❌ Auto-reconnect exception: ${account.account_name} - ${err.message}`);
+      results.push({ accountId: account.id, name: account.account_name, reconnected: false, error: err.message });
+    }
+
+    await new Promise(r => setTimeout(r, 2000));
+  }
+
+  const reconnected = results.filter(r => r.reconnected).length;
+  if (reconnected > 0) {
+    logger.info(`🔄 Auto-reconnect: ${reconnected}/${results.length} tài khoản đã kết nối lại thành công`);
+  }
+
+  return results;
+};
+
+module.exports = { syncAccount, syncAllAccounts, autoReconnectErrorAccounts };
