@@ -153,7 +153,7 @@ const syncAccount = async (accountId, options = {}) => {
       details: { error: err.message },
     });
 
-    // Gửi email cảnh báo nếu user bật tính năng này
+    // Gửi email cảnh báo VÀ tự động reconnect song song
     try {
       const userResult = await query(
         'SELECT user_id FROM ad_accounts WHERE id = $1',
@@ -170,6 +170,30 @@ const syncAccount = async (accountId, options = {}) => {
       }
     } catch (emailErr) {
       logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
+    }
+
+    // Tự động test connection lại (giống nhấn nút Test)
+    try {
+      logger.info(`🔄 Auto-reconnect: Đang thử kết nối lại ${account.account_name}...`);
+      const testResult = await service.testConnection(account.credentials);
+      if (testResult.success) {
+        await query(
+          `UPDATE ad_accounts SET status = 'active', status_message = NULL,
+           currency = COALESCE($1, currency) WHERE id = $2`,
+          [testResult.data?.currency || null, accountId]
+        );
+        logger.info(`✅ Auto-reconnect OK: ${account.account_name} — sẽ sync lại ở chu kỳ tiếp`);
+        await logEvent({
+          accountId,
+          eventType: EVENT_TYPES.SYNC_SUCCESS,
+          level: 'success',
+          message: `Auto-reconnect thành công: ${account.account_name}`,
+        });
+      } else {
+        logger.warn(`❌ Auto-reconnect thất bại: ${account.account_name} — ${testResult.message}`);
+      }
+    } catch (reconnectErr) {
+      logger.warn(`❌ Auto-reconnect exception: ${account.account_name} — ${reconnectErr.message}`);
     }
   }
 
