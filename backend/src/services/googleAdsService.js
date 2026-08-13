@@ -46,6 +46,23 @@ const getCustomerId = (credentials) => {
 };
 
 /**
+ * google-ads-api decode lỗi GAQL/API thành đối tượng GoogleAdsFailure { errors: [{ message, error_code }] }
+ * thay vì ném Error thông thường, nên err.message luôn undefined. Hàm này lấy đúng message thật.
+ */
+const extractGoogleAdsError = (err) => {
+  if (err?.errors?.length) {
+    return err.errors
+      .map((e) => {
+        const code = e.error_code && Object.values(e.error_code).find((v) => v);
+        return code ? `${e.message} [${code}]` : e.message;
+      })
+      .filter(Boolean)
+      .join('; ');
+  }
+  return err?.message || String(err);
+};
+
+/**
  * Test kết nối tài khoản Google Ads
  */
 const testConnection = async (credentials) => {
@@ -70,10 +87,11 @@ const testConnection = async (credentials) => {
       },
     };
   } catch (err) {
-    logger.error('Google Ads test failed:', err.message);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads test failed:', message);
     return {
       success: false,
-      message: err.message || 'Không thể kết nối Google Ads',
+      message: message || 'Không thể kết nối Google Ads',
     };
   }
 };
@@ -172,8 +190,9 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
       raw_data: row,
     }));
   } catch (err) {
-    logger.error('Google Ads getCampaigns error:', err.message);
-    throw new Error(`Lỗi lấy chiến dịch Google Ads: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads getCampaigns error:', message);
+    throw new Error(`Lỗi lấy chiến dịch Google Ads: ${message}`);
   }
 };
 
@@ -243,8 +262,9 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
       raw_data: row,
     }));
   } catch (err) {
-    logger.error('Google Ads getAdGroups error:', err.message);
-    throw new Error(`Lỗi lấy nhóm quảng cáo: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads getAdGroups error:', message);
+    throw new Error(`Lỗi lấy nhóm quảng cáo: ${message}`);
   }
 };
 
@@ -306,8 +326,9 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
       raw_data: row,
     }));
   } catch (err) {
-    logger.error('Google Ads getAds error:', err.message);
-    throw new Error(`Lỗi lấy quảng cáo: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads getAds error:', message);
+    throw new Error(`Lỗi lấy quảng cáo: ${message}`);
   }
 };
 
@@ -327,8 +348,9 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
 
     return { success: true, status: newStatus };
   } catch (err) {
-    logger.error('Google Ads toggleCampaign error:', err.message);
-    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} chiến dịch: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads toggleCampaign error:', message);
+    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} chiến dịch: ${message}`);
   }
 };
 
@@ -361,8 +383,9 @@ const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
     }
     return { success: true };
   } catch (err) {
-    logger.error(`Google toggleObjectStatus (${scope}) error:`, err.message);
-    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} Google ${scope}: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error(`Google toggleObjectStatus (${scope}) error:`, message);
+    throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} Google ${scope}: ${message}`);
   }
 };
 
@@ -451,7 +474,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     }
     return map;
   } catch (err) {
-    logger.error(`Google getAllScopeMetrics (${scope}) error:`, err.message);
+    logger.error(`Google getAllScopeMetrics (${scope}) error:`, extractGoogleAdsError(err));
     return {};
   }
 };
@@ -507,8 +530,9 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
       conversions: Number(row.metrics?.conversions || 0),
     }));
   } catch (err) {
-    logger.error('Google Ads getDailyMetrics error:', err.message);
-    throw new Error(`Lỗi lấy số liệu hằng ngày: ${err.message}`);
+    const message = extractGoogleAdsError(err);
+    logger.error('Google Ads getDailyMetrics error:', message);
+    throw new Error(`Lỗi lấy số liệu hằng ngày: ${message}`);
   }
 };
 
@@ -524,7 +548,7 @@ const getLiveMetrics = async (credentials, scope = 'campaign') => {
     for (const c of campaigns) map[c.external_id] = c.metrics;
     return map;
   } catch (err) {
-    logger.error('Google getLiveMetrics error:', err.message);
+    logger.error('Google getLiveMetrics error:', extractGoogleAdsError(err));
     return {};
   }
 };
