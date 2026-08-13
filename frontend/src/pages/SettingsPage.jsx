@@ -146,7 +146,7 @@ export default function SettingsPage() {
 
         <div className="bg-slate-50 rounded-lg p-3">
           <div className="text-xs font-medium text-slate-500 mb-2">Gửi email thử để kiểm tra kết nối</div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <input
               type="email"
               value={testEmail}
@@ -230,7 +230,7 @@ export default function SettingsPage() {
           Không cần chờ đến giờ tự động.
         </p>
 
-        <div className="flex items-center justify-between bg-indigo-50 border border-indigo-100 rounded-lg p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-indigo-50 border border-indigo-100 rounded-lg p-4">
           <div>
             <div className="text-sm font-medium text-indigo-800">Gửi báo cáo ngay bây giờ</div>
             <div className="text-xs text-indigo-500 mt-0.5">
