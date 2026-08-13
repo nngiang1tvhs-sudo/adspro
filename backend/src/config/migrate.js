@@ -290,6 +290,10 @@ ALTER TABLE rules ADD COLUMN IF NOT EXISTS run_started_at TIMESTAMP;
 -- Index cho concurrent lock check
 CREATE INDEX IF NOT EXISTS idx_rules_running ON rules(id) WHERE is_running = TRUE;
 
+-- Nhóm rule (gom nhiều rule chi tiết lại để dễ quản lý, vd nhiều ngưỡng tắt camp khác nhau)
+ALTER TABLE rules ADD COLUMN IF NOT EXISTS group_name VARCHAR(100);
+CREATE INDEX IF NOT EXISTS idx_rules_group ON rules(group_name);
+
 -- Index tối ưu cooldown lookup
 CREATE INDEX IF NOT EXISTS idx_rule_history_cooldown ON rule_history(rule_id, target_id, status, executed_at DESC);
 

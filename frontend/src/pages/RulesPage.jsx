@@ -3,7 +3,7 @@ import PlatformTabs from '../components/PlatformTabs';
 import { rulesApi, dashboardApi, campaignsApi } from '../services/api';
 import { PLATFORM_LABELS, timeAgo } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle, Search, CheckSquare } from 'lucide-react';
+import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle, Search, CheckSquare, Copy } from 'lucide-react';
 
 const METRICS_BY_PLATFORM = {
   google: [
@@ -113,6 +113,22 @@ const getActionTypes = (scope) => {
   ];
 };
 
+// Gom rule theo group_name; rule không thuộc nhóm nào hiển thị cuối, không có tiêu đề nhóm
+const groupRulesByName = (rules) => {
+  const groups = new Map();
+  for (const r of rules) {
+    const key = r.group_name || '';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(r);
+  }
+  const keys = [...groups.keys()].sort((a, b) => {
+    if (!a) return 1;
+    if (!b) return -1;
+    return a.localeCompare(b);
+  });
+  return keys.map(k => [k, groups.get(k)]);
+};
+
 export default function RulesPage() {
   const [platform, setPlatform] = useState('google');
   const [accountId, setAccountId] = useState('');
@@ -121,6 +137,7 @@ export default function RulesPage() {
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingRule, setEditingRule] = useState(null);
+  const [duplicateFrom, setDuplicateFrom] = useState(null);
   const [debugResult, setDebugResult] = useState(null);
 
   useEffect(() => {
@@ -206,11 +223,19 @@ export default function RulesPage() {
 
   const handleEdit = (rule) => {
     setEditingRule(rule);
+    setDuplicateFrom(null);
     setShowForm(true);
   };
 
   const handleNew = () => {
     setEditingRule(null);
+    setDuplicateFrom(null);
+    setShowForm(true);
+  };
+
+  const handleDuplicate = (rule) => {
+    setEditingRule(null);
+    setDuplicateFrom({ ...rule, name: `${rule.name} (Copy)` });
     setShowForm(true);
   };
 
@@ -252,18 +277,34 @@ export default function RulesPage() {
           </button>
         </div>
       ) : (
-        <div className="grid gap-3">
-          {rules.map(rule => <RuleCard key={rule.id} rule={rule} onToggle={handleToggle} onRun={handleRun} onEdit={handleEdit} onDelete={handleDelete} />)}
+        <div className="space-y-5">
+          {groupRulesByName(rules).map(([groupName, groupRules]) => (
+            <div key={groupName || '__none__'}>
+              {groupName && (
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{groupName}</span>
+                  <span className="text-xs text-slate-400">({groupRules.length})</span>
+                </div>
+              )}
+              <div className="grid gap-3">
+                {groupRules.map(rule => (
+                  <RuleCard key={rule.id} rule={rule} onToggle={handleToggle} onRun={handleRun} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
       {showForm && (
         <RuleFormModal
           rule={editingRule}
+          initialData={duplicateFrom}
           platform={platform}
           accounts={accounts}
-          onClose={() => { setShowForm(false); setEditingRule(null); }}
-          onSaved={() => { setShowForm(false); setEditingRule(null); loadRules(); }}
+          existingGroups={[...new Set(rules.map(r => r.group_name).filter(Boolean))]}
+          onClose={() => { setShowForm(false); setEditingRule(null); setDuplicateFrom(null); }}
+          onSaved={() => { setShowForm(false); setEditingRule(null); setDuplicateFrom(null); loadRules(); }}
         />
       )}
 
@@ -368,7 +409,7 @@ function ConditionChips({ c, getMetricLabel }) {
 }
 
 // ============== Rule Card ==============
-function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
+function RuleCard({ rule, onToggle, onRun, onEdit, onDelete, onDuplicate }) {
   const conditions = rule.conditions || [];
   const actions = rule.actions || [];
 
@@ -428,6 +469,9 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete }) {
           </button>
           <button onClick={() => onEdit(rule)} className="p-2 text-slate-600 bg-slate-50 rounded-lg hover:opacity-80" title="Sửa">
             <Edit size={14} />
+          </button>
+          <button onClick={() => onDuplicate(rule)} className="p-2 text-slate-600 bg-slate-50 rounded-lg hover:opacity-80" title="Sao chép rule">
+            <Copy size={14} />
           </button>
           <button onClick={() => onDelete(rule)} className="p-2 text-red-600 bg-red-50 rounded-lg hover:opacity-80" title="Xóa">
             <Trash2 size={14} />
@@ -550,27 +594,30 @@ function ConditionRowInputs({ c, metrics, platform, onChange, onMetricChange, on
 }
 
 // ============== Rule Form Modal ==============
-function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
-  const [name, setName] = useState(rule?.name || '');
-  const [description, setDescription] = useState(rule?.description || '');
-  const [scope, setScope] = useState(rule?.scope || 'campaign');
-  const [accountId, setAccountId] = useState(rule?.account_id || '');
-  const [cooldown, setCooldown] = useState(rule?.cooldown_minutes || 60);
-  const [isActive, setIsActive] = useState(rule?.is_active !== false);
-  const [emailNotify, setEmailNotify] = useState(rule?.email_notify !== false);
-  const [conditionsLogic, setConditionsLogic] = useState(rule?.conditions_logic || 'AND');
+function RuleFormModal({ rule, initialData, platform, accounts, existingGroups = [], onClose, onSaved }) {
+  // Khi sao chép rule: prefill từ initialData nhưng vẫn tạo mới (rule = null)
+  const source = rule || initialData;
+  const [name, setName] = useState(source?.name || '');
+  const [description, setDescription] = useState(source?.description || '');
+  const [groupName, setGroupName] = useState(source?.group_name || '');
+  const [scope, setScope] = useState(source?.scope || 'campaign');
+  const [accountId, setAccountId] = useState(source?.account_id || '');
+  const [cooldown, setCooldown] = useState(source?.cooldown_minutes || 60);
+  const [isActive, setIsActive] = useState(source?.is_active !== false);
+  const [emailNotify, setEmailNotify] = useState(source?.email_notify !== false);
+  const [conditionsLogic, setConditionsLogic] = useState(source?.conditions_logic || 'AND');
   const [conditions, setConditions] = useState(() => {
-    const conds = rule?.conditions || [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }];
+    const conds = source?.conditions || [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }];
     return Array.isArray(conds) ? conds : [{ metric: 'spend', operator: '>', value: 0, timeRange: 'today' }];
   });
   const [useGroupMode, setUseGroupMode] = useState(() =>
-    Array.isArray(rule?.conditions) && rule.conditions.some(c => c.type === 'group')
+    Array.isArray(source?.conditions) && source.conditions.some(c => c.type === 'group')
   );
-  const [action, setAction] = useState((rule?.actions || [{ type: 'notify' }])[0]?.type || 'notify');
+  const [action, setAction] = useState((source?.actions || [{ type: 'notify' }])[0]?.type || 'notify');
   const [saving, setSaving] = useState(false);
-  const [targetMode, setTargetMode] = useState(rule?.target_mode || 'all');
-  const [selectedTargets, setSelectedTargets] = useState(rule?.target_ids || []);
-  const [statusFilter, setStatusFilter] = useState(rule?.target_status_filter || 'all');
+  const [targetMode, setTargetMode] = useState(source?.target_mode || 'all');
+  const [selectedTargets, setSelectedTargets] = useState(source?.target_ids || []);
+  const [statusFilter, setStatusFilter] = useState(source?.target_status_filter || 'all');
   const [showPicker, setShowPicker] = useState(false);
 
   const metrics = METRICS_BY_PLATFORM[platform];
@@ -653,6 +700,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
         platform,
         account_id: accountId || null,
         name, description, scope,
+        group_name: groupName || null,
         conditions, conditions_logic: conditionsLogic,
         actions: [{ type: action }],
         cooldown_minutes: Number(cooldown),
@@ -682,7 +730,7 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
     <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl my-8">
         <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-          <h2 className="text-lg font-semibold">{rule ? 'Sửa Rule' : 'Tạo Rule mới'}</h2>
+          <h2 className="text-lg font-semibold">{rule ? 'Sửa Rule' : initialData ? 'Sao chép Rule' : 'Tạo Rule mới'}</h2>
           <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-md"><X size={18} /></button>
         </div>
 
@@ -701,9 +749,24 @@ function RuleFormModal({ rule, platform, accounts, onClose, onSaved }) {
             </div>
           </div>
 
-          <div>
-            <label className="label">Mô tả</label>
-            <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="Mô tả ngắn về rule này" />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="label">Mô tả</label>
+              <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="Mô tả ngắn về rule này" />
+            </div>
+            <div>
+              <label className="label">Nhóm rule (không bắt buộc)</label>
+              <input
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="input"
+                placeholder="VD: Camp ABC - Ngưỡng chi phí"
+                list="rule-group-suggestions"
+              />
+              <datalist id="rule-group-suggestions">
+                {existingGroups.map(g => <option key={g} value={g} />)}
+              </datalist>
+            </div>
           </div>
 
           <div className="grid grid-cols-4 gap-3">
