@@ -689,7 +689,7 @@ export default function CampaignsPage() {
         <div className="text-sm font-semibold">{title}</div>
         <button onClick={onClose}><X size={16} /></button>
       </div>
-      <div className="grid grid-cols-3 gap-2 text-xs">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
         {cols.map(col => (
           <label key={col.key} className={`flex items-center gap-2 ${col.sticky || col.pinned ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
             <input
@@ -841,7 +841,7 @@ export default function CampaignsPage() {
             )}
           </div>
 
-          <div className="grid grid-cols-3 gap-2 text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
             {columns.map(col => (
               <label key={col.key} className={`flex items-center gap-2 ${col.sticky || col.pinned ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}`}>
                 <input
@@ -865,7 +865,7 @@ export default function CampaignsPage() {
 
       {/* Drill-down breadcrumb */}
       {drillDown && (
-        <div className="flex items-center gap-2 text-sm text-slate-500">
+        <div className="flex items-center gap-2 text-sm text-slate-500 flex-wrap">
           <button onClick={() => { setDrillDown(null); setShowDrillColSettings(false); }} className="text-blue-600 hover:underline">Chien dich</button>
           {drillDown.breadcrumb.map((b, i) => {
             const isLast = i === drillDown.breadcrumb.length - 1;
