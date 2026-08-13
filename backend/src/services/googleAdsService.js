@@ -128,9 +128,9 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
         metrics.average_cpc,
         metrics.average_cpm,
         metrics.cost_micros,
-        metrics.video_views,
-        metrics.average_cpv,
-        metrics.video_view_rate,
+        metrics.video_trueview_views,
+        metrics.trueview_average_cpv,
+        metrics.video_trueview_view_rate,
         metrics.engagements,
         metrics.engagement_rate,
         metrics.conversions,
@@ -166,15 +166,15 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
         cpc: row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
         cpm: row.metrics?.average_cpm ? Number(row.metrics.average_cpm) / 1000000 : 0,
         spend: row.metrics?.cost_micros ? Number(row.metrics.cost_micros) / 1000000 : 0,
-        video_views: Number(row.metrics?.video_views || 0),
-        cpv: row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
-        view_rate: Number(row.metrics?.video_view_rate || 0),
+        video_views: Number(row.metrics?.video_trueview_views || 0),
+        cpv: row.metrics?.trueview_average_cpv ? Number(row.metrics.trueview_average_cpv) / 1000000 : 0,
+        view_rate: Number(row.metrics?.video_trueview_view_rate || 0),
         engagements: Number(row.metrics?.engagements || 0),
         engagement_rate: Number(row.metrics?.engagement_rate || 0),
         conversions: Number(row.metrics?.conversions || 0),
-        result: Number(row.metrics?.video_views || row.metrics?.conversions || 0),
-        cost_per_result: row.metrics?.average_cpv
-          ? Number(row.metrics.average_cpv) / 1000000
+        result: Number(row.metrics?.video_trueview_views || row.metrics?.conversions || 0),
+        cost_per_result: row.metrics?.trueview_average_cpv
+          ? Number(row.metrics.trueview_average_cpv) / 1000000
           : (Number(row.metrics?.cost_per_conversion || 0) / 1000000),
         cpa: Number(row.metrics?.cost_per_conversion || 0) / 1000000,
         revenue: Number(row.metrics?.conversions_value || 0),
@@ -226,8 +226,8 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         metrics.ctr,
         metrics.average_cpc,
         metrics.cost_micros,
-        metrics.video_views,
-        metrics.average_cpv,
+        metrics.video_trueview_views,
+        metrics.trueview_average_cpv,
         metrics.conversions,
         metrics.cost_per_conversion
       FROM ad_group
@@ -254,8 +254,8 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         ctr: Number(row.metrics?.ctr || 0),
         cpc: row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
         spend: row.metrics?.cost_micros ? Number(row.metrics.cost_micros) / 1000000 : 0,
-        video_views: Number(row.metrics?.video_views || 0),
-        cpv: row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+        video_views: Number(row.metrics?.video_trueview_views || 0),
+        cpv: row.metrics?.trueview_average_cpv ? Number(row.metrics.trueview_average_cpv) / 1000000 : 0,
         conversions: Number(row.metrics?.conversions || 0),
         cpa: Number(row.metrics?.cost_per_conversion || 0) / 1000000,
       },
@@ -294,8 +294,8 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         metrics.ctr,
         metrics.average_cpc,
         metrics.cost_micros,
-        metrics.video_views,
-        metrics.average_cpv,
+        metrics.video_trueview_views,
+        metrics.trueview_average_cpv,
         metrics.conversions,
         metrics.cost_per_conversion
       FROM ad_group_ad
@@ -318,8 +318,8 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         ctr: Number(row.metrics?.ctr || 0),
         cpc: row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
         spend: row.metrics?.cost_micros ? Number(row.metrics.cost_micros) / 1000000 : 0,
-        video_views: Number(row.metrics?.video_views || 0),
-        cpv: row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+        video_views: Number(row.metrics?.video_trueview_views || 0),
+        cpv: row.metrics?.trueview_average_cpv ? Number(row.metrics.trueview_average_cpv) / 1000000 : 0,
         conversions: Number(row.metrics?.conversions || 0),
         cpa: row.metrics?.cost_per_conversion ? Number(row.metrics.cost_per_conversion) / 1000000 : 0,
       },
@@ -418,13 +418,13 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       ctr:              Number(row.metrics?.ctr || 0),
       cpc:              row.metrics?.average_cpc ? Number(row.metrics.average_cpc) / 1000000 : 0,
       spend:            row.metrics?.cost_micros  ? Number(row.metrics.cost_micros) / 1000000 : 0,
-      video_views:      Number(row.metrics?.video_views || 0),
-      cpv:              row.metrics?.average_cpv ? Number(row.metrics.average_cpv) / 1000000 : 0,
+      video_views:      Number(row.metrics?.video_trueview_views || 0),
+      cpv:              row.metrics?.trueview_average_cpv ? Number(row.metrics.trueview_average_cpv) / 1000000 : 0,
       conversions:      Number(row.metrics?.conversions || 0),
       cpa:              Number(row.metrics?.cost_per_conversion || 0) / 1000000,
-      result:           Number(row.metrics?.video_views || row.metrics?.conversions || 0),
-      cost_per_result:  row.metrics?.average_cpv
-        ? Number(row.metrics.average_cpv) / 1000000
+      result:           Number(row.metrics?.video_trueview_views || row.metrics?.conversions || 0),
+      cost_per_result:  row.metrics?.trueview_average_cpv
+        ? Number(row.metrics.trueview_average_cpv) / 1000000
         : Number(row.metrics?.cost_per_conversion || 0) / 1000000,
       engagements:      Number(row.metrics?.engagements || 0),
       impression_share: Number(row.metrics?.search_impression_share || 0),
@@ -435,7 +435,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       const results = await customer.query(
         `SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id AS campaign_id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
-                metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
+                metrics.cost_micros, metrics.video_trueview_views, metrics.trueview_average_cpv, metrics.conversions,
                 metrics.cost_per_conversion, metrics.engagements, metrics.search_impression_share
          FROM ad_group
          WHERE ad_group.status != 'REMOVED' ${dateFilter}`
@@ -455,7 +455,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       const results = await customer.query(
         `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.campaign_id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
-                metrics.cost_micros, metrics.video_views, metrics.average_cpv, metrics.conversions,
+                metrics.cost_micros, metrics.video_trueview_views, metrics.trueview_average_cpv, metrics.conversions,
                 metrics.cost_per_conversion, metrics.engagements
          FROM ad_group_ad
          WHERE ad_group_ad.status != 'REMOVED' ${dateFilter}`
@@ -511,7 +511,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
         metrics.impressions,
         metrics.clicks,
         metrics.cost_micros,
-        metrics.video_views,
+        metrics.video_trueview_views,
         metrics.conversions
       FROM campaign
       ${dateFilter}
@@ -526,7 +526,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
       impressions: Number(row.metrics?.impressions || 0),
       clicks: Number(row.metrics?.clicks || 0),
       spend: row.metrics?.cost_micros ? Number(row.metrics.cost_micros) / 1000000 : 0,
-      video_views: Number(row.metrics?.video_views || 0),
+      video_views: Number(row.metrics?.video_trueview_views || 0),
       conversions: Number(row.metrics?.conversions || 0),
     }));
   } catch (err) {
