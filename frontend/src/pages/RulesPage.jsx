@@ -258,12 +258,12 @@ export default function RulesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Quản lý Rule</h1>
           <p className="text-sm text-slate-500 mt-0.5">Tự động hóa quản lý chiến dịch theo điều kiện</p>
         </div>
-        <button onClick={handleNew} className="btn btn-primary">
+        <button onClick={handleNew} className="btn btn-primary self-start sm:self-auto">
           <Plus size={16} /> Tạo Rule mới
         </button>
       </div>
@@ -376,7 +376,7 @@ export default function RulesPage() {
                           {ev.result ? '✓' : '✗'} Nhóm ({ev.logic})
                         </div>
                         {ev.evaluations?.map((ge, k) => (
-                          <div key={k} className={`flex items-center gap-2 text-xs py-1 px-2 rounded mb-0.5 ${ge.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                          <div key={k} className={`flex items-center gap-2 text-xs py-1 px-2 rounded mb-0.5 flex-wrap ${ge.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
                             <span>{ge.result ? '✓' : '✗'}</span>
                             <span className="font-mono">{ge.condition?.metric} {ge.condition?.operator} {ge.condition?.value}</span>
                             <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ge.condition?.timeRange || 'today'))?.label || ge.condition?.timeRange || 'today'})</span>
@@ -386,7 +386,7 @@ export default function RulesPage() {
                         ))}
                       </div>
                     ) : (
-                      <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
+                      <div key={j} className={`flex items-center gap-2 text-xs py-1 px-2 rounded flex-wrap ${ev.result ? 'bg-emerald-100 text-emerald-800' : 'bg-red-50 text-red-700'}`}>
                         <span>{ev.result ? '✓' : '✗'}</span>
                         <span className="font-mono">{ev.condition?.metric} {ev.condition?.operator} {ev.condition?.value}</span>
                         <span className="text-slate-500">({TIME_RANGES.find(t => t.key === (ev.condition?.timeRange || 'today'))?.label || ev.condition?.timeRange || 'today'})</span>
@@ -449,9 +449,9 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete, onDuplicate }) {
 
   return (
     <div className="card p-4">
-      <div className="flex items-start justify-between gap-3 mb-3">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3 mb-3">
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="font-semibold text-slate-800">{rule.name}</h3>
             <span className={`badge ${rule.is_active ? 'badge-success' : 'badge-warning'}`}>
               {rule.is_active ? 'Đang chạy' : 'Tạm dừng'}
@@ -474,7 +474,7 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete, onDuplicate }) {
             )}
           </div>
           {rule.description && <p className="text-xs text-slate-500 mb-1">{rule.description}</p>}
-          <div className="text-xs text-slate-400 flex items-center gap-3">
+          <div className="text-xs text-slate-400 flex items-center gap-3 flex-wrap">
             <span><Clock size={10} className="inline mr-1" /> Cooldown: {rule.cooldown_minutes} phút</span>
             {rule.account_name && <span>Tài khoản: {rule.account_name}</span>}
             {rule.last_triggered_at && <span>Trigger gần nhất: {timeAgo(rule.last_triggered_at)}</span>}
@@ -761,7 +761,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">Tên rule *</label>
               <input value={name} onChange={(e) => setName(e.target.value)} className="input" placeholder="VD: Tắt camp khi CPV > 500đ" />
@@ -775,7 +775,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">Mô tả</label>
               <input value={description} onChange={(e) => setDescription(e.target.value)} className="input" placeholder="Mô tả ngắn về rule này" />
@@ -795,7 +795,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
             </div>
           </div>
 
-          <div className="grid grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div>
               <label className="label">Phạm vi *</label>
               <select value={scope} onChange={(e) => setScope(e.target.value)} className="input">
@@ -816,7 +816,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
               <label className="label">Cooldown (phút)</label>
               <input type="number" value={cooldown} onChange={(e) => setCooldown(e.target.value)} className="input" min="1" />
             </div>
-            <div className="flex items-end gap-3">
+            <div className="flex items-end gap-3 flex-wrap">
               <label className="flex items-center gap-2 text-sm">
                 <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
                 Kích hoạt ngay
@@ -831,7 +831,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
           {/* Target selection */}
           <div>
             <label className="label">Áp dụng cho</label>
-            <div className="flex gap-2 mb-2">
+            <div className="flex gap-2 mb-2 flex-wrap">
               <button
                 type="button"
                 onClick={() => { setTargetMode('all'); setSelectedTargets([]); }}
@@ -887,9 +887,9 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
 
           {/* Conditions */}
           <div>
-            <div className="flex items-center justify-between mb-2">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-2">
               <label className="label !mb-0">Điều kiện *</label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <select value={conditionsLogic} onChange={(e) => setConditionsLogic(e.target.value)} className="text-xs border border-slate-200 rounded px-2 py-1">
                   <option value="AND">VÀ (Tất cả phải đúng)</option>
                   <option value="OR">HOẶC (Một trong các điều kiện)</option>
@@ -1129,7 +1129,7 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
           <button onClick={onClose} className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400"><X size={18} /></button>
         </div>
 
-        <div className="flex flex-1 min-h-0 overflow-hidden">
+        <div className="flex flex-col sm:flex-row flex-1 min-h-0 overflow-hidden">
           {/* Left: list */}
           <div className="flex-1 flex flex-col min-h-0 min-w-0">
             {/* Search + count row */}
@@ -1191,10 +1191,10 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
           </div>
 
           {/* Divider */}
-          <div className="w-px bg-slate-100 flex-shrink-0" />
+          <div className="h-px w-full sm:h-auto sm:w-px bg-slate-100 flex-shrink-0" />
 
           {/* Right: selected panel */}
-          <div className="w-56 flex flex-col min-h-0 flex-shrink-0 bg-slate-50">
+          <div className="w-full sm:w-56 max-h-40 sm:max-h-none flex flex-col min-h-0 flex-shrink-0 bg-slate-50">
             <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between flex-shrink-0">
               <span className="text-xs font-semibold text-slate-600 uppercase tracking-wide">
                 Đã chọn ({checked.size})

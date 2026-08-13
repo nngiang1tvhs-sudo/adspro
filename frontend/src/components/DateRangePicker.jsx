@@ -51,7 +51,7 @@ export default function DateRangePicker({ value, onChange }) {
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg w-80">
+        <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-slate-200 rounded-xl shadow-lg w-80 max-w-[92vw]">
           <div className="grid grid-cols-2 gap-1 p-2 border-b border-slate-100">
             {DATE_PRESETS.map(preset => (
               <button

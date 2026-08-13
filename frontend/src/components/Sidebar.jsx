@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Settings2, History, Link2, LogOut, RefreshCw, SlidersHorizontal } from 'lucide-react';
+import { LayoutDashboard, Megaphone, Settings2, History, Link2, LogOut, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { campaignsApi } from '../services/api';
@@ -14,7 +14,7 @@ const NAV_ITEMS = [
   { to: '/settings', icon: SlidersHorizontal, label: 'Cài đặt' },
 ];
 
-export default function Sidebar() {
+export default function Sidebar({ open = false, onClose = () => {} }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [syncing, setSyncing] = useState(false);
@@ -38,12 +38,30 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-60 bg-white border-r border-slate-200 flex flex-col h-screen sticky top-0">
-      <div className="px-6 py-5 border-b border-slate-100">
-        <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
-          AdsPro
-        </h1>
-        <p className="text-xs text-slate-400 mt-0.5">Quản lý ads tập trung</p>
+    <>
+      {/* Overlay - chỉ hiện trên mobile khi drawer mở */}
+      {open && (
+        <div
+          className="fixed inset-0 bg-black/40 z-40 md:hidden"
+          onClick={onClose}
+        />
+      )}
+
+      <aside
+        className={`w-60 bg-white border-r border-slate-200 flex flex-col h-screen fixed md:sticky top-0 z-50 transition-transform duration-200 ${
+          open ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+        }`}
+      >
+      <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-bold bg-gradient-to-r from-indigo-500 to-purple-500 bg-clip-text text-transparent">
+            AdsPro
+          </h1>
+          <p className="text-xs text-slate-400 mt-0.5">Quản lý ads tập trung</p>
+        </div>
+        <button onClick={onClose} className="p-1.5 text-slate-400 hover:bg-slate-100 rounded-md md:hidden" title="Đóng menu">
+          <X size={18} />
+        </button>
       </div>
 
       <div className="px-3 pt-3">
@@ -57,11 +75,12 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 px-3 py-3 flex flex-col gap-0.5">
+      <nav className="flex-1 px-3 py-3 flex flex-col gap-0.5 overflow-y-auto">
         {NAV_ITEMS.map(item => (
           <NavLink
             key={item.to}
             to={item.to}
+            onClick={onClose}
             className={({ isActive }) =>
               `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                 isActive
@@ -94,6 +113,7 @@ export default function Sidebar() {
           </button>
         </div>
       </div>
-    </aside>
+      </aside>
+    </>
   );
 }
