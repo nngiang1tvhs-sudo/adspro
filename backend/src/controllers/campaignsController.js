@@ -287,7 +287,7 @@ const syncCampaigns = asyncHandler(async (req, res) => {
  * Lấy danh sách chiến dịch/nhóm/quảng cáo từ DB để chọn target cho rule
  */
 const listTargets = asyncHandler(async (req, res) => {
-  const { platform, account_id, scope } = req.query;
+  const { platform, account_id, scope, search } = req.query;
 
   if (!platform || !PLATFORMS.includes(platform)) {
     return error(res, 'Platform không hợp lệ', 400);
@@ -306,8 +306,9 @@ const listTargets = asyncHandler(async (req, res) => {
       WHERE a.user_id = $1 AND a.platform = $2
     `;
     params = [...baseParams];
-    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ` ORDER BY CASE WHEN ag.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, c.name, ag.name LIMIT 500`;
+    if (account_id) { sql += ` AND a.id = $${params.length + 1}`; params.push(account_id); }
+    if (search) { sql += ` AND ag.name ILIKE $${params.length + 1}`; params.push(`%${search}%`); }
+    sql += ` ORDER BY CASE WHEN ag.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, ag.created_at DESC LIMIT 2000`;
   } else if (scope === 'ad') {
     sql = `
       SELECT ads.id, ads.name, ads.status, ads.external_id,
@@ -318,8 +319,9 @@ const listTargets = asyncHandler(async (req, res) => {
       WHERE a.user_id = $1 AND a.platform = $2
     `;
     params = [...baseParams];
-    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ` ORDER BY CASE WHEN ads.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, c.name, ads.name LIMIT 500`;
+    if (account_id) { sql += ` AND a.id = $${params.length + 1}`; params.push(account_id); }
+    if (search) { sql += ` AND ads.name ILIKE $${params.length + 1}`; params.push(`%${search}%`); }
+    sql += ` ORDER BY CASE WHEN ads.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, ads.created_at DESC LIMIT 2000`;
   } else {
     sql = `
       SELECT c.id, c.name, c.status, c.external_id,
@@ -329,8 +331,9 @@ const listTargets = asyncHandler(async (req, res) => {
       WHERE a.user_id = $1 AND a.platform = $2
     `;
     params = [...baseParams];
-    if (account_id) { sql += ` AND a.id = $3`; params.push(account_id); }
-    sql += ` ORDER BY CASE WHEN c.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, a.account_name, c.name LIMIT 1000`;
+    if (account_id) { sql += ` AND a.id = $${params.length + 1}`; params.push(account_id); }
+    if (search) { sql += ` AND c.name ILIKE $${params.length + 1}`; params.push(`%${search}%`); }
+    sql += ` ORDER BY CASE WHEN c.status IN ('ENABLED','ACTIVE','ENABLE') THEN 0 ELSE 1 END, c.created_at DESC LIMIT 3000`;
   }
 
   const result = await query(sql, params);

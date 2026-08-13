@@ -975,13 +975,19 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
   const [checked, setChecked] = useState(() => new Map(selected.map(t => [t.id, t])));
 
   useEffect(() => {
-    loadItems();
-  }, []);
+    const t = setTimeout(() => loadItems(search), search ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [search]);
 
-  const loadItems = async () => {
+  const loadItems = async (searchTerm) => {
     setLoading(true);
     try {
-      const res = await campaignsApi.getTargets({ platform, account_id: accountId || undefined, scope });
+      const res = await campaignsApi.getTargets({
+        platform,
+        account_id: accountId || undefined,
+        scope,
+        search: searchTerm || undefined,
+      });
       setItems(res.data.targets || []);
     } catch (err) {
       toast.error('Không thể tải danh sách');
@@ -990,6 +996,7 @@ function TargetPickerModal({ platform, accountId, scope, selected, onClose, onSa
     }
   };
 
+  // Backend đã lọc theo search khi có searchTerm; giữ filter phía client chỉ để phản hồi tức thì.
   const filtered = items.filter(item =>
     !search || item.name.toLowerCase().includes(search.toLowerCase())
   );
