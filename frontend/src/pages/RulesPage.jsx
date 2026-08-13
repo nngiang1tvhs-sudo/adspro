@@ -113,6 +113,18 @@ const getActionTypes = (scope) => {
   ];
 };
 
+// Bảng màu nền luân phiên cho từng nhóm rule để dễ phân biệt bằng mắt
+const GROUP_COLORS = [
+  { bg: 'bg-blue-50/70', border: 'border-blue-200', text: 'text-blue-700' },
+  { bg: 'bg-emerald-50/70', border: 'border-emerald-200', text: 'text-emerald-700' },
+  { bg: 'bg-violet-50/70', border: 'border-violet-200', text: 'text-violet-700' },
+  { bg: 'bg-amber-50/70', border: 'border-amber-200', text: 'text-amber-700' },
+  { bg: 'bg-rose-50/70', border: 'border-rose-200', text: 'text-rose-700' },
+  { bg: 'bg-cyan-50/70', border: 'border-cyan-200', text: 'text-cyan-700' },
+  { bg: 'bg-orange-50/70', border: 'border-orange-200', text: 'text-orange-700' },
+  { bg: 'bg-teal-50/70', border: 'border-teal-200', text: 'text-teal-700' },
+];
+
 // Gom rule theo group_name; rule không thuộc nhóm nào hiển thị cuối, không có tiêu đề nhóm
 const groupRulesByName = (rules) => {
   const groups = new Map();
@@ -278,21 +290,30 @@ export default function RulesPage() {
         </div>
       ) : (
         <div className="space-y-5">
-          {groupRulesByName(rules).map(([groupName, groupRules]) => (
-            <div key={groupName || '__none__'}>
-              {groupName && (
-                <div className="flex items-center gap-2 mb-2">
-                  <span className="text-xs font-semibold text-slate-500 uppercase tracking-wide">{groupName}</span>
-                  <span className="text-xs text-slate-400">({groupRules.length})</span>
+          {(() => {
+            let colorIdx = -1;
+            return groupRulesByName(rules).map(([groupName, groupRules]) => {
+              const color = groupName ? GROUP_COLORS[(colorIdx += 1) % GROUP_COLORS.length] : null;
+              return (
+                <div
+                  key={groupName || '__none__'}
+                  className={color ? `rounded-xl border ${color.bg} ${color.border} p-3` : ''}
+                >
+                  {groupName && (
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs font-semibold uppercase tracking-wide ${color.text}`}>{groupName}</span>
+                      <span className="text-xs text-slate-400">({groupRules.length})</span>
+                    </div>
+                  )}
+                  <div className="grid gap-3">
+                    {groupRules.map(rule => (
+                      <RuleCard key={rule.id} rule={rule} onToggle={handleToggle} onRun={handleRun} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} />
+                    ))}
+                  </div>
                 </div>
-              )}
-              <div className="grid gap-3">
-                {groupRules.map(rule => (
-                  <RuleCard key={rule.id} rule={rule} onToggle={handleToggle} onRun={handleRun} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} />
-                ))}
-              </div>
-            </div>
-          ))}
+              );
+            });
+          })()}
         </div>
       )}
 
