@@ -1,4 +1,4 @@
-const { GoogleAdsApi, ResourceNames } = require('google-ads-api');
+const { GoogleAdsApi, ResourceNames, enums } = require('google-ads-api');
 const logger = require('../utils/logger');
 const { decryptCredentials } = require('../utils/encryption');
 
@@ -60,6 +60,16 @@ const extractGoogleAdsError = (err) => {
       .join('; ');
   }
   return err?.message || String(err);
+};
+
+/**
+ * customer.query() (REST) trả các trường enum (status, channel_type, ad_type...) dưới dạng
+ * số nguyên thô (vd: campaign.status = 2) thay vì tên chuỗi ('ENABLED') như trước. Toàn bộ
+ * app (DB, frontend, rules engine) đều so sánh theo chuỗi nên phải decode lại ngay khi đọc.
+ */
+const enumName = (enumObj, value) => {
+  if (value === null || value === undefined) return value;
+  return typeof value === 'number' ? (enumObj[value] ?? value) : value;
 };
 
 /**
@@ -151,14 +161,17 @@ const getCampaigns = async (credentials, dateRange = { from: null, to: null }) =
     return results.map(row => ({
       external_id: String(row.campaign.id),
       name: row.campaign.name,
-      status: row.campaign.status,
-      channel_type: row.campaign.advertising_channel_type,
-      sub_type: row.campaign.advertising_channel_sub_type,
-      bidding_strategy: row.campaign.bidding_strategy_type,
+      status: enumName(enums.CampaignStatus, row.campaign.status),
+      channel_type: enumName(enums.AdvertisingChannelType, row.campaign.advertising_channel_type),
+      sub_type: enumName(enums.AdvertisingChannelSubType, row.campaign.advertising_channel_sub_type),
+      bidding_strategy: enumName(enums.BiddingStrategyType, row.campaign.bidding_strategy_type),
       budget_micros: row.campaign_budget?.amount_micros,
       budget: row.campaign_budget?.amount_micros ? Number(row.campaign_budget.amount_micros) / 1000000 : 0,
-      delivery_method: row.campaign_budget?.delivery_method,
-      objective: mapGoogleObjective(row.campaign.advertising_channel_type, row.campaign.advertising_channel_sub_type),
+      delivery_method: enumName(enums.BudgetDeliveryMethod, row.campaign_budget?.delivery_method),
+      objective: mapGoogleObjective(
+        enumName(enums.AdvertisingChannelType, row.campaign.advertising_channel_type),
+        enumName(enums.AdvertisingChannelSubType, row.campaign.advertising_channel_sub_type)
+      ),
       metrics: {
         impressions: Number(row.metrics?.impressions || 0),
         clicks: Number(row.metrics?.clicks || 0),
@@ -242,8 +255,8 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
       external_id: String(row.ad_group.id),
       campaign_external_id: String(row.campaign.id),
       name: row.ad_group.name,
-      status: row.ad_group.status,
-      type: row.ad_group.type,
+      status: enumName(enums.AdGroupStatus, row.ad_group.status),
+      type: enumName(enums.AdGroupType, row.ad_group.type),
       bid_amount: row.ad_group?.cpc_bid_micros ? Number(row.ad_group.cpc_bid_micros) / 1000000 : 0,
       target_cpv: row.ad_group?.cpv_bid_micros ? Number(row.ad_group.cpv_bid_micros) / 1000000 : 0,
       target_cpm: row.ad_group?.cpm_bid_micros ? Number(row.ad_group.cpm_bid_micros) / 1000000 : 0,
@@ -309,8 +322,8 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
     return results.map(row => ({
       external_id: String(row.ad_group_ad.ad.id),
       name: row.ad_group_ad.ad.name || `Ad ${row.ad_group_ad.ad.id}`,
-      ad_type: row.ad_group_ad.ad.type,
-      status: row.ad_group_ad.status,
+      ad_type: enumName(enums.AdType, row.ad_group_ad.ad.type),
+      status: enumName(enums.AdGroupAdStatus, row.ad_group_ad.status),
       landing_url: row.ad_group_ad.ad.final_urls?.[0] || '',
       metrics: {
         impressions: Number(row.metrics?.impressions || 0),
@@ -446,7 +459,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         items.push({
           external_id: String(row.ad_group.id),
           name: row.ad_group.name,
-          status: row.ad_group.status,
+          status: enumName(enums.AdGroupStatus, row.ad_group.status),
           campaign_external_id: row.campaign?.id ? String(row.campaign.id) : null,
         });
       });
@@ -466,7 +479,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         items.push({
           external_id: String(row.ad_group_ad.ad.id),
           name: row.ad_group_ad.ad.name || String(row.ad_group_ad.ad.id),
-          status: row.ad_group_ad.status,
+          status: enumName(enums.AdGroupAdStatus, row.ad_group_ad.status),
           campaign_external_id: row.ad_group?.campaign_id ? String(row.ad_group.campaign_id) : null,
         });
       });
