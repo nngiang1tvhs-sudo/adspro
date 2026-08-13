@@ -16,7 +16,7 @@
     "pg": "^8.11.3",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
-    "google-ads-api": "^17.0.0",
+    "google-ads-api": "^24.1.0",
     "facebook-nodejs-business-sdk": "^19.0.2",
     "axios": "^1.6.2",
     "node-cron": "^3.0.3",

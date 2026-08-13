@@ -1,4 +1,4 @@
-const { GoogleAdsApi } = require('google-ads-api');
+const { GoogleAdsApi, ResourceNames } = require('google-ads-api');
 const logger = require('../utils/logger');
 const { decryptCredentials } = require('../utils/encryption');
 
@@ -38,6 +38,11 @@ const getCustomer = (credentials) => {
   }
 
   return client.Customer(config);
+};
+
+const getCustomerId = (credentials) => {
+  const decrypted = decryptCredentials(credentials);
+  return String(decrypted.customer_id).replace(/-/g, '');
 };
 
 /**
@@ -312,10 +317,11 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
 const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => {
   try {
     const customer = getCustomer(credentials);
+    const customerId = getCustomerId(credentials);
     const newStatus = enable ? 'ENABLED' : 'PAUSED';
 
     await customer.campaigns.update([{
-      resource_name: customer.buildResourceName(`campaigns/${campaignExternalId}`),
+      resource_name: ResourceNames.campaign(customerId, campaignExternalId),
       status: newStatus,
     }]);
 
@@ -331,11 +337,12 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
  */
 const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
   const customer = getCustomer(credentials);
+  const customerId = getCustomerId(credentials);
   const newStatus = enable ? 'ENABLED' : 'PAUSED';
   try {
     if (scope === 'ad_group') {
       await customer.adGroups.update([{
-        resource_name: customer.buildResourceName(`adGroups/${externalId}`),
+        resource_name: ResourceNames.adGroup(customerId, externalId),
         status: newStatus,
       }]);
     } else if (scope === 'ad') {
