@@ -76,18 +76,23 @@ const STRING_OPERATORS = [
 ];
 
 const TIME_RANGES_BASE = [
-  { key: 'today',     label: 'Hôm nay' },
-  { key: 'yesterday', label: 'Hôm qua' },
-  { key: '3d',        label: '3 ngày' },
-  { key: '5d',        label: '5 ngày' },
-  { key: '7d',        label: '7 ngày' },
-  { key: 'all',       label: '30 ngày' },
-  { key: '180d',      label: '180 ngày' },
-  { key: 'lifetime',  label: 'Toàn thời gian' },
+  { key: 'today',      label: 'Hôm nay' },
+  { key: 'yesterday',  label: 'Hôm qua' },
+  { key: '3d',         label: '3 ngày' },
+  { key: '5d',         label: '5 ngày' },
+  { key: '7d',         label: '7 ngày qua' },
+  { key: '14d',        label: '14 ngày qua' },
+  { key: '30d',        label: '30 ngày qua' },
+  { key: 'this_month', label: 'Tháng này' },
+  { key: 'last_month', label: 'Tháng trước' },
+  { key: 'all_time',   label: 'Toàn thời gian' },
+  { key: 'all',        label: '30 ngày' },
+  { key: '180d',       label: '180 ngày' },
+  { key: 'lifetime',   label: 'Toàn thời gian' },
 ];
 
 const TIME_RANGES_BY_PLATFORM = {
-  google:   ['today','yesterday','3d','5d','7d','all'],
+  google:   ['today','yesterday','7d','14d','30d','this_month','last_month','all_time'],
   facebook: ['today','yesterday','3d','5d','7d','all','lifetime'],
   tiktok:   ['today','yesterday','3d','5d','7d','all','180d'],
 };

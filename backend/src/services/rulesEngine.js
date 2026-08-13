@@ -58,11 +58,23 @@ const getDateRange = (timeRange) => {
       return { from: vn.subtract(4, 'day').format('YYYY-MM-DD'), to: today };
     case '7d':
       return { from: vn.subtract(6, 'day').format('YYYY-MM-DD'), to: today };
+    case '14d':
+      return { from: vn.subtract(13, 'day').format('YYYY-MM-DD'), to: today };
+    case '30d':
+      return { from: vn.subtract(29, 'day').format('YYYY-MM-DD'), to: today };
+    case 'this_month':
+      return { from: vn.startOf('month').format('YYYY-MM-DD'), to: today };
+    case 'last_month': {
+      const lm = vn.subtract(1, 'month');
+      return { from: lm.startOf('month').format('YYYY-MM-DD'), to: lm.endOf('month').format('YYYY-MM-DD') };
+    }
     case '180d':
       return { from: vn.subtract(179, 'day').format('YYYY-MM-DD'), to: today };
     case 'lifetime':
+    case 'all_time':
       // Facebook: buildInsightsTimeParam → date_preset(maximum)
       // TikTok: getCampaigns → lifetime:true
+      // Google: getCampaigns → dateRange.from === 'ALL_TIME'
       return { from: 'ALL_TIME', to: 'ALL_TIME' };
     case 'all':
     default:
