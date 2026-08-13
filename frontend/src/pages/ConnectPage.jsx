@@ -322,7 +322,7 @@ function AccountFormModal({ account, onClose, onSaved }) {
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="label">
                 {isFacebookBMMode ? 'Nhãn BM (không bắt buộc)' : 'Tên hiển thị *'}
@@ -471,7 +471,7 @@ function EmailTab() {
         <h3 className="font-semibold text-slate-700 mb-4 flex items-center gap-2">
           <Mail size={16} /> Email nhận thông báo
         </h3>
-        <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
           <div>
             <label className="label">Email chính *</label>
             <input
@@ -494,7 +494,7 @@ function EmailTab() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 pt-3 border-t border-slate-100">
+        <div className="flex items-center gap-2 pt-3 border-t border-slate-100 flex-wrap">
           <input
             type="email"
             value={testEmail}
@@ -544,7 +544,7 @@ function EmailTab() {
 
       <div className="card p-5">
         <h3 className="font-semibold text-slate-700 mb-4">Cấu hình thời gian</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className="label">Giờ gửi báo cáo sáng</label>
             <input
