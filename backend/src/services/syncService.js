@@ -153,30 +153,15 @@ const syncAccount = async (accountId, options = {}) => {
       details: { error: err.message },
     });
 
-    // Gửi email cảnh báo VÀ tự động reconnect song song
-    try {
-      const userResult = await query(
-        'SELECT user_id FROM ad_accounts WHERE id = $1',
-        [accountId]
-      );
-      if (userResult.rowCount > 0) {
-        await sendSyncErrorAlert({
-          userId: userResult.rows[0].user_id,
-          accountName: account.account_name,
-          platform: account.platform,
-          errorMessage: err.message,
-          accountId,
-        });
-      }
-    } catch (emailErr) {
-      logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
-    }
-
-    // Tự động test connection lại (giống nhấn nút Test)
+    // Tự động test connection lại (giống nhấn nút Test) TRƯỚC khi quyết định báo lỗi qua email —
+    // nhiều lỗi sync chỉ là thoáng qua (rate limit, token vừa hết hạn rồi tự refresh...) và tự khỏi
+    // sau khi reconnect, nên chỉ gửi email khi reconnect cũng thất bại.
+    let reconnected = false;
     try {
       logger.info(`🔄 Auto-reconnect: Đang thử kết nối lại ${account.account_name}...`);
       const testResult = await service.testConnection(account.credentials);
       if (testResult.success) {
+        reconnected = true;
         await query(
           `UPDATE ad_accounts SET status = 'active', status_message = NULL,
            currency = COALESCE($1, currency) WHERE id = $2`,
@@ -194,6 +179,27 @@ const syncAccount = async (accountId, options = {}) => {
       }
     } catch (reconnectErr) {
       logger.warn(`❌ Auto-reconnect exception: ${account.account_name} — ${reconnectErr.message}`);
+    }
+
+    // Chỉ gửi email cảnh báo khi auto-reconnect cũng thất bại (lỗi thật, không phải lỗi thoáng qua)
+    if (!reconnected) {
+      try {
+        const userResult = await query(
+          'SELECT user_id FROM ad_accounts WHERE id = $1',
+          [accountId]
+        );
+        if (userResult.rowCount > 0) {
+          await sendSyncErrorAlert({
+            userId: userResult.rows[0].user_id,
+            accountName: account.account_name,
+            platform: account.platform,
+            errorMessage: err.message,
+            accountId,
+          });
+        }
+      } catch (emailErr) {
+        logger.warn('Không gửi được email cảnh báo sync:', emailErr.message);
+      }
     }
   }
 
