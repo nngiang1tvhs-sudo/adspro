@@ -41,6 +41,7 @@ const METRICS_BY_PLATFORM = {
     { key: 'page_likes',     label: 'Follow/Thích trang' },
     { key: 'cpp_follow',     label: 'Chi phí/Follow' },
     { key: 'engagements',    label: 'Tương tác' },
+    { key: 'video_views',    label: 'Lượt xem' },
     { key: 'video_2s_views', label: 'Video 2s' },
     { key: 'purchases',      label: 'Đơn hàng' },
     { key: 'time',           label: 'Thời gian (khung giờ)' },
