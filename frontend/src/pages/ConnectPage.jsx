@@ -353,22 +353,30 @@ function AccountFormModal({ account, onClose, onSaved }) {
               </div>
             )}
             <div className="space-y-3">
-              {fields.map(field => (
-                <div key={field.key}>
-                  <label className="label">
-                    {field.label}
-                    {field.optional && <span className="text-slate-400 font-normal"> (không bắt buộc)</span>}
-                  </label>
-                  <input
-                    type={field.type}
-                    value={credentials[field.key] || ''}
-                    onChange={(e) => setCredentials({ ...credentials, [field.key]: e.target.value })}
-                    className="input font-mono text-xs"
-                    placeholder={account ? '••••••••' : ''}
-                  />
-                  {field.help && <div className="text-[11px] text-slate-400 mt-1">{field.help}</div>}
-                </div>
-              ))}
+              {fields.map(field => {
+                const isSaved = account?.credential_fields?.includes(field.key);
+                return (
+                  <div key={field.key}>
+                    <label className="label flex items-center gap-1.5">
+                      {field.label}
+                      {field.optional && <span className="text-slate-400 font-normal"> (không bắt buộc)</span>}
+                      {account && (
+                        isSaved
+                          ? <span className="text-[10px] font-semibold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded">✓ Đã lưu</span>
+                          : <span className="text-[10px] font-semibold text-slate-400 bg-slate-100 px-1.5 py-0.5 rounded">Chưa nhập</span>
+                      )}
+                    </label>
+                    <input
+                      type={field.type}
+                      value={credentials[field.key] || ''}
+                      onChange={(e) => setCredentials({ ...credentials, [field.key]: e.target.value })}
+                      className="input font-mono text-xs"
+                      placeholder={isSaved ? '•••••••• (để trống nếu giữ nguyên)' : ''}
+                    />
+                    {field.help && <div className="text-[11px] text-slate-400 mt-1">{field.help}</div>}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

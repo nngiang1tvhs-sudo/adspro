@@ -10,7 +10,7 @@ const listAccounts = asyncHandler(async (req, res) => {
 
   let sql = `
     SELECT id, uuid, platform, account_name, account_id, currency, group_name, status, status_message,
-           last_sync_at, token_expires_at, created_at, updated_at
+           last_sync_at, token_expires_at, created_at, updated_at, credentials
     FROM ad_accounts
     WHERE user_id = $1
   `;
@@ -24,7 +24,13 @@ const listAccounts = asyncHandler(async (req, res) => {
   sql += ' ORDER BY platform, group_name NULLS LAST, account_name';
 
   const result = await query(sql, params);
-  return success(res, { accounts: result.rows });
+  // Chỉ trả về TÊN các field credentials đã có giá trị (không trả giá trị thật) để
+  // form sửa tài khoản biết ô nào đã lưu, ô nào đang trống (vd Login Customer ID).
+  const accounts = result.rows.map(({ credentials, ...rest }) => ({
+    ...rest,
+    credential_fields: Object.keys(credentials || {}),
+  }));
+  return success(res, { accounts });
 });
 
 const testConnection = asyncHandler(async (req, res) => {
@@ -195,9 +201,14 @@ const updateAccount = asyncHandler(async (req, res) => {
     params.push(group_name || null);
   }
 
-  if (credentials && typeof credentials === 'object') {
+  if (credentials && typeof credentials === 'object' && Object.keys(credentials).length > 0) {
     const service = getService(account.platform);
-    const encrypted = encryptCredentials(credentials);
+    // Merge với credentials đã lưu — form sửa chỉ gửi những field người dùng thật sự gõ vào,
+    // nên phải gộp với giá trị cũ, tránh việc chỉ điền 1 field (vd Login Customer ID) làm
+    // mất/không test được các field còn lại đã lưu trước đó.
+    const existingDecrypted = decryptCredentials(account.credentials);
+    const merged = { ...existingDecrypted, ...credentials };
+    const encrypted = encryptCredentials(merged);
     const testResult = await service.testConnection(encrypted);
 
     if (!testResult.success) {
