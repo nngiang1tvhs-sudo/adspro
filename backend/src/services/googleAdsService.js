@@ -1,4 +1,4 @@
-const { GoogleAdsApi, ResourceNames, enums } = require('google-ads-api');
+const { GoogleAdsApi, ResourceNames, enums, errors } = require('google-ads-api');
 const logger = require('../utils/logger');
 const { decryptCredentials } = require('../utils/encryption');
 
@@ -49,11 +49,21 @@ const getCustomerId = (credentials) => {
  * google-ads-api decode lỗi GAQL/API thành đối tượng GoogleAdsFailure { errors: [{ message, error_code }] }
  * thay vì ném Error thông thường, nên err.message luôn undefined. Hàm này lấy đúng message thật.
  */
+const errorCodeName = (key, value) => {
+  try {
+    const pascal = key.replace(/(^|_)([a-z])/g, (_, __, c) => c.toUpperCase());
+    return errors[`${pascal}Enum`]?.[pascal]?.[value] || value;
+  } catch {
+    return value;
+  }
+};
+
 const extractGoogleAdsError = (err) => {
   if (err?.errors?.length) {
     return err.errors
       .map((e) => {
-        const code = e.error_code && Object.values(e.error_code).find((v) => v);
+        const entry = e.error_code && Object.entries(e.error_code).find(([, v]) => v);
+        const code = entry ? errorCodeName(entry[0], entry[1]) : null;
         return code ? `${e.message} [${code}]` : e.message;
       })
       .filter(Boolean)
