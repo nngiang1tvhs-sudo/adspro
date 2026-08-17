@@ -432,7 +432,7 @@ const fmtMetricVal = (val, fmt, unit, currencyOverride) => {
 /**
  * Thông báo khi rule kích hoạt
  */
-const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, currency, actionType = 'notify', evaluations = [], failReason = null }) => {
+const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, currency, actionType = 'notify', evaluations = [], failReason = null, note = null }) => {
   try {
     const userResult = await query(`SELECT id FROM users LIMIT 1`);
     if (userResult.rowCount === 0) return { success: false };
@@ -483,6 +483,11 @@ const sendRuleNotification = async ({ ruleName, objectName, objectType, platform
     ${failReason ? `
     <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px 16px;margin-bottom:18px;">
       <div style="font-size:12px;color:#B91C1C;line-height:1.5;">${failReason}</div>
+    </div>` : ''}
+
+    ${note ? `
+    <div style="background:#F0F9FF;border:1px solid #BAE6FD;border-radius:8px;padding:12px 16px;margin-bottom:18px;">
+      <div style="font-size:12px;color:#075985;line-height:1.5;">${note}</div>
     </div>` : ''}
 
     ${condRows ? `

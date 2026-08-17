@@ -204,10 +204,28 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             await service.toggleCampaignStatus(account.credentials, object.external_id, false);
           }
         } catch (e) { apiErr = e; }
-        // Google Ads chặn mutate với một số resource (VD: chiến dịch Video/TrueView) —
-        // dù báo lỗi vẫn không được coi là đã tắt thật, nên không cập nhật cache/gửi email "Đã tắt".
+
+        // Google Ads chặn mutate trực tiếp campaign/ad_group của chiến dịch Video/TrueView
+        // (MUTATE_NOT_ALLOWED) nhưng cho phép mutate từng ad_group_ad — nên khi bị chặn ở
+        // cấp chiến dịch/nhóm, tắt cascade toàn bộ quảng cáo con để đạt hiệu quả tương đương.
         const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
-        if (!googleMutateBlocked) {
+        let cascade = null;
+        if (googleMutateBlocked && ['campaign', 'ad_group'].includes(object.type) && service.cascadeToggleChildAds) {
+          cascade = await service.cascadeToggleChildAds(
+            account.credentials,
+            object.type === 'campaign' ? { campaignExternalId: object.external_id } : { adGroupExternalId: object.external_id },
+            false
+          );
+        }
+        const cascaded = cascade?.success && cascade.count > 0;
+
+        if (cascaded) {
+          try {
+            await query('UPDATE ads SET status = $1 WHERE external_id = ANY($2)', ['PAUSED', cascade.adExternalIds]);
+          } catch (dbErr) {
+            logger.warn(`Cache DB update skipped [cascade pause ads]: ${dbErr.message}`);
+          }
+        } else if (!googleMutateBlocked) {
           // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
           try {
             if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
@@ -217,13 +235,19 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             logger.warn(`Cache DB update skipped [pause ${object.type}]: ${dbErr.message}`);
           }
         }
+
         if (rule.email_notify) {
-          if (googleMutateBlocked) {
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện tắt nhưng Google Ads không cho phép tự động tắt qua API (chiến dịch Video/TrueView bị Google khóa mutate). Vui lòng tắt thủ công trên Google Ads.' });
+          if (cascaded) {
+            const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations, note: `Google chặn tắt trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động tắt toàn bộ ${cascade.count} quảng cáo bên trong để dừng hiển thị.` });
+          } else if (googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện tắt nhưng Google Ads không cho phép tự động tắt qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để tắt thay thế. Vui lòng tắt thủ công trên Google Ads.' });
           } else {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
           }
         }
+
+        if (cascaded) return { success: true, action: 'pause', message: `Đã tắt ${cascade.count} quảng cáo con trong ${object.name}` };
         if (apiErr) return { success: false, action: 'pause', message: apiErr.message };
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
       }
@@ -239,8 +263,25 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             await service.toggleCampaignStatus(account.credentials, object.external_id, true);
           }
         } catch (e) { apiErr = e; }
+
         const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
-        if (!googleMutateBlocked) {
+        let cascade = null;
+        if (googleMutateBlocked && ['campaign', 'ad_group'].includes(object.type) && service.cascadeToggleChildAds) {
+          cascade = await service.cascadeToggleChildAds(
+            account.credentials,
+            object.type === 'campaign' ? { campaignExternalId: object.external_id } : { adGroupExternalId: object.external_id },
+            true
+          );
+        }
+        const cascaded = cascade?.success && cascade.count > 0;
+
+        if (cascaded) {
+          try {
+            await query('UPDATE ads SET status = $1 WHERE external_id = ANY($2)', ['ENABLED', cascade.adExternalIds]);
+          } catch (dbErr) {
+            logger.warn(`Cache DB update skipped [cascade enable ads]: ${dbErr.message}`);
+          }
+        } else if (!googleMutateBlocked) {
           const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
           try {
             if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
@@ -250,13 +291,19 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             logger.warn(`Cache DB update skipped [enable ${object.type}]: ${dbErr.message}`);
           }
         }
+
         if (rule.email_notify) {
-          if (googleMutateBlocked) {
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện bật nhưng Google Ads không cho phép tự động bật qua API (chiến dịch Video/TrueView bị Google khóa mutate). Vui lòng bật thủ công trên Google Ads.' });
+          if (cascaded) {
+            const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations, note: `Google chặn bật trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động bật toàn bộ ${cascade.count} quảng cáo bên trong.` });
+          } else if (googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện bật nhưng Google Ads không cho phép tự động bật qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để bật thay thế. Vui lòng bật thủ công trên Google Ads.' });
           } else {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
           }
         }
+
+        if (cascaded) return { success: true, action: 'enable', message: `Đã bật ${cascade.count} quảng cáo con trong ${object.name}` };
         if (apiErr) return { success: false, action: 'enable', message: apiErr.message };
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
       }

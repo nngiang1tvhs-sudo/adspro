@@ -413,6 +413,43 @@ const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
 };
 
 /**
+ * Google chặn mutate trực tiếp campaign/ad_group của các chiến dịch Video/TrueView
+ * (MUTATE_NOT_ALLOWED) nhưng vẫn cho mutate từng ad_group_ad. Hàm này tắt/bật toàn bộ
+ * quảng cáo con thuộc 1 chiến dịch hoặc 1 nhóm quảng cáo — dùng làm phương án thay thế
+ * khi rules engine không tắt/bật được trực tiếp cấp chiến dịch/nhóm.
+ */
+const cascadeToggleChildAds = async (credentials, { campaignExternalId, adGroupExternalId }, enable) => {
+  try {
+    const customer = getCustomer(credentials);
+    const newStatus = enable ? 'ENABLED' : 'PAUSED';
+    const whereClause = campaignExternalId
+      ? `campaign.id = ${campaignExternalId}`
+      : `ad_group.id = ${adGroupExternalId}`;
+
+    const rows = await customer.query(
+      `SELECT ad_group_ad.resource_name, ad_group_ad.ad.id
+       FROM ad_group_ad
+       WHERE ${whereClause} AND ad_group_ad.status != 'REMOVED'`
+    );
+
+    if (rows.length === 0) return { success: true, count: 0, adExternalIds: [] };
+
+    const ops = rows.map(row => ({ resource_name: row.ad_group_ad.resource_name, status: newStatus }));
+    await customer.adGroupAds.update(ops);
+
+    return {
+      success: true,
+      count: ops.length,
+      adExternalIds: rows.map(row => String(row.ad_group_ad.ad.id)),
+    };
+  } catch (err) {
+    const message = extractGoogleAdsError(err);
+    logger.error('Google cascadeToggleChildAds error:', message);
+    return { success: false, count: 0, adExternalIds: [], message };
+  }
+};
+
+/**
  * Lấy metrics theo scope cho toàn bộ tài khoản — dùng cho rules engine
  */
 const getAllScopeMetrics = async (credentials, dateRange, scope) => {
@@ -583,6 +620,7 @@ module.exports = {
   getAds,
   toggleCampaignStatus,
   toggleObjectStatus,
+  cascadeToggleChildAds,
   getAllScopeMetrics,
   getDailyMetrics,
   getLiveMetrics,
