@@ -410,6 +410,8 @@ const METRIC_CFG = {
 const ACTION_CFG = {
   pause:          { label: 'Đã tắt',         icon: '⏸', color: '#EA580C' },
   enable:         { label: 'Đã bật',          icon: '▶',  color: '#16A34A' },
+  pause_failed:   { label: 'Cần tắt thủ công', icon: '⚠️', color: '#DC2626' },
+  enable_failed:  { label: 'Cần bật thủ công', icon: '⚠️', color: '#DC2626' },
   notify:         { label: 'Thông báo',       icon: '🔔', color: '#2563EB' },
   warn_complete:  { label: 'Sắp hoàn thành', icon: '⚠️', color: '#D97706' },
   warn_threshold: { label: 'Vượt ngưỡng',    icon: '⚠️', color: '#D97706' },
@@ -430,7 +432,7 @@ const fmtMetricVal = (val, fmt, unit, currencyOverride) => {
 /**
  * Thông báo khi rule kích hoạt
  */
-const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, currency, actionType = 'notify', evaluations = [] }) => {
+const sendRuleNotification = async ({ ruleName, objectName, objectType, platform, accountName, currency, actionType = 'notify', evaluations = [], failReason = null }) => {
   try {
     const userResult = await query(`SELECT id FROM users LIMIT 1`);
     if (userResult.rowCount === 0) return { success: false };
@@ -477,6 +479,11 @@ const sendRuleNotification = async ({ ruleName, objectName, objectType, platform
       <div style="font-size:16px;font-weight:700;color:#1E293B;">${objectName}</div>
       <div style="font-size:12px;color:#64748B;margin-top:4px;">${typeLabel} &nbsp;·&nbsp; ${platLabel} &nbsp;·&nbsp; ${accountName}</div>
     </div>
+
+    ${failReason ? `
+    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:12px 16px;margin-bottom:18px;">
+      <div style="font-size:12px;color:#B91C1C;line-height:1.5;">${failReason}</div>
+    </div>` : ''}
 
     ${condRows ? `
     <div style="font-size:10px;color:#94A3B8;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:8px;">Điều kiện kích hoạt</div>

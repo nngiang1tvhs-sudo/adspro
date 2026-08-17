@@ -204,16 +204,25 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             await service.toggleCampaignStatus(account.credentials, object.external_id, false);
           }
         } catch (e) { apiErr = e; }
-        // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
-        try {
-          if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
-          else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
-          else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
-        } catch (dbErr) {
-          logger.warn(`Cache DB update skipped [pause ${object.type}]: ${dbErr.message}`);
+        // Google Ads chặn mutate với một số resource (VD: chiến dịch Video/TrueView) —
+        // dù báo lỗi vẫn không được coi là đã tắt thật, nên không cập nhật cache/gửi email "Đã tắt".
+        const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
+        if (!googleMutateBlocked) {
+          // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
+          try {
+            if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
+            else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
+            else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', ['PAUSED', String(object.external_id)]);
+          } catch (dbErr) {
+            logger.warn(`Cache DB update skipped [pause ${object.type}]: ${dbErr.message}`);
+          }
         }
         if (rule.email_notify) {
-          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
+          if (googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện tắt nhưng Google Ads không cho phép tự động tắt qua API (chiến dịch Video/TrueView bị Google khóa mutate). Vui lòng tắt thủ công trên Google Ads.' });
+          } else {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
+          }
         }
         if (apiErr) return { success: false, action: 'pause', message: apiErr.message };
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
@@ -230,16 +239,23 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
             await service.toggleCampaignStatus(account.credentials, object.external_id, true);
           }
         } catch (e) { apiErr = e; }
-        const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
-        try {
-          if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
-          else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
-          else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
-        } catch (dbErr) {
-          logger.warn(`Cache DB update skipped [enable ${object.type}]: ${dbErr.message}`);
+        const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
+        if (!googleMutateBlocked) {
+          const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
+          try {
+            if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
+            else if (object.type === 'ad_group') await query('UPDATE ad_groups SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
+            else if (object.type === 'ad') await query('UPDATE ads SET status = $1 WHERE external_id = $2', [enabledStatus, String(object.external_id)]);
+          } catch (dbErr) {
+            logger.warn(`Cache DB update skipped [enable ${object.type}]: ${dbErr.message}`);
+          }
         }
         if (rule.email_notify) {
-          await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
+          if (googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện bật nhưng Google Ads không cho phép tự động bật qua API (chiến dịch Video/TrueView bị Google khóa mutate). Vui lòng bật thủ công trên Google Ads.' });
+          } else {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
+          }
         }
         if (apiErr) return { success: false, action: 'enable', message: apiErr.message };
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
