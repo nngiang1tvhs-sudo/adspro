@@ -417,11 +417,18 @@ const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
  * (MUTATE_NOT_ALLOWED) nhưng vẫn cho mutate từng ad_group_ad. Hàm này tắt/bật toàn bộ
  * quảng cáo con thuộc 1 chiến dịch hoặc 1 nhóm quảng cáo — dùng làm phương án thay thế
  * khi rules engine không tắt/bật được trực tiếp cấp chiến dịch/nhóm.
+ *
+ * Vì campaign.status/ad_group.status không bao giờ đổi thật (Google chặn), rules engine
+ * không có cách nào biết "đã cascade rồi" ngoài hỏi lại đúng câu hỏi: hiện còn ad nào ở
+ * trạng thái ngược lại (đang bật khi cần tắt, hoặc đang tắt khi cần bật) không? Nên chỉ
+ * lấy đúng các ad_group_ad đang ở trạng thái đối lập — nếu không còn ad nào, trả về
+ * count = 0 nghĩa là "đã xong từ lần cascade trước", không phải lỗi.
  */
 const cascadeToggleChildAds = async (credentials, { campaignExternalId, adGroupExternalId }, enable) => {
   try {
     const customer = getCustomer(credentials);
     const newStatus = enable ? 'ENABLED' : 'PAUSED';
+    const currentStatusFilter = enable ? 'PAUSED' : 'ENABLED';
     const whereClause = campaignExternalId
       ? `campaign.id = ${campaignExternalId}`
       : `ad_group.id = ${adGroupExternalId}`;
@@ -429,7 +436,7 @@ const cascadeToggleChildAds = async (credentials, { campaignExternalId, adGroupE
     const rows = await customer.query(
       `SELECT ad_group_ad.resource_name, ad_group_ad.ad.id
        FROM ad_group_ad
-       WHERE ${whereClause} AND ad_group_ad.status != 'REMOVED'`
+       WHERE ${whereClause} AND ad_group_ad.status = '${currentStatusFilter}'`
     );
 
     if (rows.length === 0) return { success: true, count: 0, adExternalIds: [] };

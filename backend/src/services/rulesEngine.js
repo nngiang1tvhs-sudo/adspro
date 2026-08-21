@@ -218,6 +218,10 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           );
         }
         const cascaded = cascade?.success && cascade.count > 0;
+        // count === 0 tức là không còn quảng cáo nào đang bật bên dưới — đã tắt xong từ lần
+        // cascade trước rồi (campaign.status không đổi nên rule cứ khớp điều kiện mãi, nhưng
+        // không có gì mới để làm/báo cả).
+        const cascadeAlreadyDone = cascade?.success && cascade.count === 0;
 
         if (cascaded) {
           try {
@@ -240,14 +244,16 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           if (cascaded) {
             const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations, note: `Google chặn tắt trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động tắt toàn bộ ${cascade.count} quảng cáo bên trong để dừng hiển thị.` });
-          } else if (googleMutateBlocked) {
+          } else if (googleMutateBlocked && !cascadeAlreadyDone) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện tắt nhưng Google Ads không cho phép tự động tắt qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để tắt thay thế. Vui lòng tắt thủ công trên Google Ads.' });
-          } else {
+          } else if (!googleMutateBlocked) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
           }
+          // cascadeAlreadyDone: đã tắt xong từ trước — không có gì mới, không gửi email.
         }
 
         if (cascaded) return { success: true, action: 'pause', message: `Đã tắt ${cascade.count} quảng cáo con trong ${object.name}` };
+        if (cascadeAlreadyDone) return { success: true, action: 'pause', message: `${object.name} đã được tắt từ trước (không còn quảng cáo nào đang bật)` };
         if (apiErr) return { success: false, action: 'pause', message: apiErr.message };
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
       }
@@ -274,6 +280,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           );
         }
         const cascaded = cascade?.success && cascade.count > 0;
+        const cascadeAlreadyDone = cascade?.success && cascade.count === 0;
 
         if (cascaded) {
           try {
@@ -296,14 +303,16 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           if (cascaded) {
             const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations, note: `Google chặn bật trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động bật toàn bộ ${cascade.count} quảng cáo bên trong.` });
-          } else if (googleMutateBlocked) {
+          } else if (googleMutateBlocked && !cascadeAlreadyDone) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện bật nhưng Google Ads không cho phép tự động bật qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để bật thay thế. Vui lòng bật thủ công trên Google Ads.' });
-          } else {
+          } else if (!googleMutateBlocked) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
           }
+          // cascadeAlreadyDone: đã bật xong từ trước — không có gì mới, không gửi email.
         }
 
         if (cascaded) return { success: true, action: 'enable', message: `Đã bật ${cascade.count} quảng cáo con trong ${object.name}` };
+        if (cascadeAlreadyDone) return { success: true, action: 'enable', message: `${object.name} đã được bật từ trước (không còn quảng cáo nào đang tắt)` };
         if (apiErr) return { success: false, action: 'enable', message: apiErr.message };
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
       }
