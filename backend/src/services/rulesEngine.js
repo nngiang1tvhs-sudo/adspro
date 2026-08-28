@@ -19,6 +19,12 @@ dayjs.extend(timezone);
  * 3. Lọc targets theo target_mode, target_status_filter
  * 4. So sánh điều kiện với dữ liệu API đúng khoảng thời gian
  * 5. Thực thi action
+ *
+ * Lưu ý riêng cho Google Ads: đối tượng ĐO LƯỜNG (scope: campaign/ad_group/ad) có thể khác
+ * đối tượng THỰC SỰ được tắt/bật. Google chỉ tắt/bật ổn định ở cấp quảng cáo (ad_group_ad) —
+ * campaign/ad_group không đảm bảo mutate được qua API. Vì vậy khi scope là campaign/ad_group,
+ * action pause/enable luôn cascade xuống toàn bộ quảng cáo con thay vì tắt/bật trực tiếp
+ * campaign/ad_group (xem executeAction + cascadeToggleChildAds trong googleAdsService.js).
  */
 
 const OPERATORS = {
@@ -196,32 +202,38 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
       case 'pause':
       case 'tat':
       case 'turn_off': {
-        let apiErr = null;
-        try {
-          if (service.toggleObjectStatus) {
-            await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
-          } else {
-            await service.toggleCampaignStatus(account.credentials, object.external_id, false);
-          }
-        } catch (e) { apiErr = e; }
+        // Google chỉ tắt/bật ổn định ở cấp quảng cáo (ad_group_ad) — campaign/ad_group không
+        // đảm bảo mutate được qua API (không chỉ riêng chiến dịch Video/TrueView). Vì vậy với
+        // scope campaign/ad_group, action luôn cascade thẳng xuống tắt toàn bộ quảng cáo con,
+        // không thử mutate trực tiếp campaign/ad_group nữa. scope='ad' vẫn tắt trực tiếp quảng
+        // cáo đó như bình thường.
+        const isGoogleParentScope = account.platform === 'google' && ['campaign', 'ad_group'].includes(object.type);
 
-        // Google Ads chặn mutate trực tiếp campaign/ad_group của chiến dịch Video/TrueView
-        // (MUTATE_NOT_ALLOWED) nhưng cho phép mutate từng ad_group_ad — nên khi bị chặn ở
-        // cấp chiến dịch/nhóm, tắt cascade toàn bộ quảng cáo con để đạt hiệu quả tương đương.
-        const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
+        let apiErr = null;
         let cascade = null;
-        if (googleMutateBlocked && ['campaign', 'ad_group'].includes(object.type) && service.cascadeToggleChildAds) {
+
+        if (isGoogleParentScope) {
           cascade = await service.cascadeToggleChildAds(
             account.credentials,
             object.type === 'campaign' ? { campaignExternalId: object.external_id } : { adGroupExternalId: object.external_id },
             false
           );
+          if (!cascade.success) apiErr = new Error(cascade.message || 'Không thể tắt quảng cáo con');
+        } else {
+          try {
+            if (service.toggleObjectStatus) {
+              await service.toggleObjectStatus(account.credentials, object.external_id, object.type, false);
+            } else {
+              await service.toggleCampaignStatus(account.credentials, object.external_id, false);
+            }
+          } catch (e) { apiErr = e; }
         }
+
         const cascaded = cascade?.success && cascade.count > 0;
         // count === 0 tức là không còn quảng cáo nào đang bật bên dưới — đã tắt xong từ lần
-        // cascade trước rồi (campaign.status không đổi nên rule cứ khớp điều kiện mãi, nhưng
-        // không có gì mới để làm/báo cả).
-        const cascadeAlreadyDone = cascade?.success && cascade.count === 0;
+        // chạy trước rồi (campaign/ad_group.status của Google không phản ánh đúng thực tế nên
+        // rule cứ khớp điều kiện mãi, nhưng không có gì mới để làm/báo cả).
+        const cascadeNoop = cascade?.success && cascade.count === 0;
 
         if (cascaded) {
           try {
@@ -229,7 +241,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           } catch (dbErr) {
             logger.warn(`Cache DB update skipped [cascade pause ads]: ${dbErr.message}`);
           }
-        } else if (!googleMutateBlocked) {
+        } else if (!isGoogleParentScope && !apiErr) {
           // Cập nhật cache DB — chỉ có hiệu lực khi target đến từ DB (campaign scope)
           try {
             if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', ['PAUSED', object.id]);
@@ -243,17 +255,17 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
         if (rule.email_notify) {
           if (cascaded) {
             const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations, note: `Google chặn tắt trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động tắt toàn bộ ${cascade.count} quảng cáo bên trong để dừng hiển thị.` });
-          } else if (googleMutateBlocked && !cascadeAlreadyDone) {
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện tắt nhưng Google Ads không cho phép tự động tắt qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để tắt thay thế. Vui lòng tắt thủ công trên Google Ads.' });
-          } else if (!googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations, note: `Google chỉ hỗ trợ tắt/bật ở cấp quảng cáo — AdsPro đã tự động tắt toàn bộ ${cascade.count} quảng cáo bên trong ${parentLabel} này để dừng hiển thị.` });
+          } else if (isGoogleParentScope && apiErr) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause_failed', evaluations, failReason: `Rule đã kích hoạt điều kiện tắt nhưng không tắt được quảng cáo con qua API: ${apiErr.message}. Vui lòng tắt thủ công trên Google Ads.` });
+          } else if (!isGoogleParentScope) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'pause', evaluations });
           }
-          // cascadeAlreadyDone: đã tắt xong từ trước — không có gì mới, không gửi email.
+          // cascadeNoop: đã tắt xong từ trước — không có gì mới, không gửi email.
         }
 
         if (cascaded) return { success: true, action: 'pause', message: `Đã tắt ${cascade.count} quảng cáo con trong ${object.name}` };
-        if (cascadeAlreadyDone) return { success: true, action: 'pause', message: `${object.name} đã được tắt từ trước (không còn quảng cáo nào đang bật)` };
+        if (cascadeNoop) return { success: true, noop: true, action: 'pause', message: `${object.name} đã được tắt từ trước (không còn quảng cáo nào đang bật)` };
         if (apiErr) return { success: false, action: 'pause', message: apiErr.message };
         return { success: true, action: 'pause', message: `Đã tắt ${object.name}` };
       }
@@ -261,26 +273,30 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
       case 'enable':
       case 'bat':
       case 'turn_on': {
-        let apiErr = null;
-        try {
-          if (service.toggleObjectStatus) {
-            await service.toggleObjectStatus(account.credentials, object.external_id, object.type, true);
-          } else {
-            await service.toggleCampaignStatus(account.credentials, object.external_id, true);
-          }
-        } catch (e) { apiErr = e; }
+        const isGoogleParentScope = account.platform === 'google' && ['campaign', 'ad_group'].includes(object.type);
 
-        const googleMutateBlocked = account.platform === 'google' && apiErr && /MUTATE_NOT_ALLOWED/i.test(apiErr.message || '');
+        let apiErr = null;
         let cascade = null;
-        if (googleMutateBlocked && ['campaign', 'ad_group'].includes(object.type) && service.cascadeToggleChildAds) {
+
+        if (isGoogleParentScope) {
           cascade = await service.cascadeToggleChildAds(
             account.credentials,
             object.type === 'campaign' ? { campaignExternalId: object.external_id } : { adGroupExternalId: object.external_id },
             true
           );
+          if (!cascade.success) apiErr = new Error(cascade.message || 'Không thể bật quảng cáo con');
+        } else {
+          try {
+            if (service.toggleObjectStatus) {
+              await service.toggleObjectStatus(account.credentials, object.external_id, object.type, true);
+            } else {
+              await service.toggleCampaignStatus(account.credentials, object.external_id, true);
+            }
+          } catch (e) { apiErr = e; }
         }
+
         const cascaded = cascade?.success && cascade.count > 0;
-        const cascadeAlreadyDone = cascade?.success && cascade.count === 0;
+        const cascadeNoop = cascade?.success && cascade.count === 0;
 
         if (cascaded) {
           try {
@@ -288,7 +304,7 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
           } catch (dbErr) {
             logger.warn(`Cache DB update skipped [cascade enable ads]: ${dbErr.message}`);
           }
-        } else if (!googleMutateBlocked) {
+        } else if (!isGoogleParentScope && !apiErr) {
           const enabledStatus = account.platform === 'google' ? 'ENABLED' : 'ACTIVE';
           try {
             if (object.type === 'campaign') await query('UPDATE campaigns SET status = $1 WHERE id = $2', [enabledStatus, object.id]);
@@ -302,17 +318,17 @@ const executeAction = async (action, object, account, rule, evaluations = []) =>
         if (rule.email_notify) {
           if (cascaded) {
             const parentLabel = object.type === 'campaign' ? 'chiến dịch' : 'nhóm quảng cáo';
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations, note: `Google chặn bật trực tiếp ${parentLabel} Video này qua API — AdsPro đã tự động bật toàn bộ ${cascade.count} quảng cáo bên trong.` });
-          } else if (googleMutateBlocked && !cascadeAlreadyDone) {
-            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: 'Rule đã kích hoạt điều kiện bật nhưng Google Ads không cho phép tự động bật qua API (chiến dịch Video/TrueView bị Google khóa mutate), và không tìm thấy quảng cáo con nào để bật thay thế. Vui lòng bật thủ công trên Google Ads.' });
-          } else if (!googleMutateBlocked) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations, note: `Google chỉ hỗ trợ tắt/bật ở cấp quảng cáo — AdsPro đã tự động bật toàn bộ ${cascade.count} quảng cáo bên trong ${parentLabel} này.` });
+          } else if (isGoogleParentScope && apiErr) {
+            await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable_failed', evaluations, failReason: `Rule đã kích hoạt điều kiện bật nhưng không bật được quảng cáo con qua API: ${apiErr.message}. Vui lòng bật thủ công trên Google Ads.` });
+          } else if (!isGoogleParentScope) {
             await sendRuleNotification({ ruleName: rule.name, objectName: object.name, objectType: object.type, platform: account.platform, accountName: account.account_name, currency: account.currency, actionType: 'enable', evaluations });
           }
-          // cascadeAlreadyDone: đã bật xong từ trước — không có gì mới, không gửi email.
+          // cascadeNoop: đã bật xong từ trước — không có gì mới, không gửi email.
         }
 
         if (cascaded) return { success: true, action: 'enable', message: `Đã bật ${cascade.count} quảng cáo con trong ${object.name}` };
-        if (cascadeAlreadyDone) return { success: true, action: 'enable', message: `${object.name} đã được bật từ trước (không còn quảng cáo nào đang tắt)` };
+        if (cascadeNoop) return { success: true, noop: true, action: 'enable', message: `${object.name} đã được bật từ trước (không còn quảng cáo nào đang tắt)` };
         if (apiErr) return { success: false, action: 'enable', message: apiErr.message };
         return { success: true, action: 'enable', message: `Đã bật ${object.name}` };
       }
@@ -677,21 +693,35 @@ const executeRule = async (rule, options = {}) => {
 
         if (!evalResult.passed) continue;
 
-        // Bỏ qua nếu action pause/enable mà status đã đúng rồi
-        const actionTypes = conditions.length > 0 ? rule.actions.map(a => a.type) : [];
         const hasPause  = rule.actions.some(a => ['pause',  'tat',  'turn_off'].includes(a.type));
         const hasEnable = rule.actions.some(a => ['enable', 'bat',  'turn_on' ].includes(a.type));
-        const s = (target.status || '').toUpperCase();
-        const isAlreadyPaused = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'].includes(s);
-        const isAlreadyActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(s);
-        if (hasPause  && isAlreadyPaused) { debugEvals[debugEvals.length - 1].skipped = 'already_paused'; continue; }
-        if (hasEnable && isAlreadyActive)  { debugEvals[debugEvals.length - 1].skipped = 'already_active'; continue; }
+
+        // Với Google scope campaign/ad_group, campaign.status/ad_group.status không phản ánh
+        // đúng thực tế (action luôn cascade xuống quảng cáo con — xem executeAction), nên không
+        // thể dựa vào status của target để biết "đã đúng trạng thái" trước khi chạy. Chỉ áp dụng
+        // skip theo status cho các trường hợp còn lại (FB/TikTok mọi scope, Google scope ad).
+        const isGoogleParentScope = account.platform === 'google' && ['campaign', 'ad_group'].includes(target.type);
+        if (!isGoogleParentScope) {
+          const s = (target.status || '').toUpperCase();
+          const isAlreadyPaused = ['PAUSED', 'PAUSE', 'DISABLED', 'DISABLE'].includes(s);
+          const isAlreadyActive = ['ENABLED', 'ACTIVE', 'ENABLE'].includes(s);
+          if (hasPause  && isAlreadyPaused) { debugEvals[debugEvals.length - 1].skipped = 'already_paused'; continue; }
+          if (hasEnable && isAlreadyActive)  { debugEvals[debugEvals.length - 1].skipped = 'already_active'; continue; }
+        }
 
         // Thực thi actions
         const actionsResults = [];
         for (const action of rule.actions) {
           const r = await executeAction(action, target, account, rule, evalResult.evaluations);
           actionsResults.push(r);
+        }
+
+        // Google parent-scope: nếu cascade xác định không còn gì để đổi (đã tắt/bật hết từ lần
+        // chạy trước), coi như skip — không ghi rule_history/không reset cooldown/không tăng
+        // total_triggers vì thực chất không có hành động mới nào xảy ra.
+        if (isGoogleParentScope && actionsResults.length > 0 && actionsResults.every(r => r.noop)) {
+          debugEvals[debugEvals.length - 1].skipped = hasPause ? 'already_paused' : 'already_active';
+          continue;
         }
 
         const allSuccess = actionsResults.every(r => r.success);
