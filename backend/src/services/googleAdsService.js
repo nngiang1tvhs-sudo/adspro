@@ -520,7 +520,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       map['__items__'] = items;
     } else if (scope === 'ad') {
       const results = await customer.query(
-        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, ad_group.campaign_id,
+        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, campaign.id AS campaign_id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_trueview_views, metrics.trueview_average_cpv, metrics.conversions,
                 metrics.cost_per_conversion, metrics.engagements
@@ -534,7 +534,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
           external_id: String(row.ad_group_ad.ad.id),
           name: row.ad_group_ad.ad.name || String(row.ad_group_ad.ad.id),
           status: enumName(enums.AdGroupAdStatus, row.ad_group_ad.status),
-          campaign_external_id: row.ad_group?.campaign_id ? String(row.ad_group.campaign_id) : null,
+          campaign_external_id: row.campaign?.id ? String(row.campaign.id) : null,
         });
       });
       map['__items__'] = items;
