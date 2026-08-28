@@ -108,11 +108,18 @@ const TIME_RANGES = TIME_RANGES_BASE;
 
 const SCOPE_LABELS = { campaign: 'chiến dịch', ad_group: 'nhóm quảng cáo', ad: 'quảng cáo' };
 
-const getActionTypes = (scope) => {
+// Google chỉ tắt/bật ổn định ở cấp quảng cáo — khi rule đo lường ở cấp chiến dịch/nhóm quảng
+// cáo, hành động thực chất là tắt/bật TOÀN BỘ quảng cáo bên trong đối tượng đó (xem
+// rulesEngine.js executeAction). Nhãn hành động phải nói rõ điều này thay vì ghi chung chung
+// "Tắt chiến dịch" (dễ hiểu lầm là tắt bản thân chiến dịch).
+const getActionTypes = (scope, platform) => {
   const obj = SCOPE_LABELS[scope] || 'chiến dịch';
+  const isGoogleParentScope = platform === 'google' && ['campaign', 'ad_group'].includes(scope);
+  const enableLabel = isGoogleParentScope ? `Bật toàn bộ quảng cáo trong ${obj}` : `Bật ${obj}`;
+  const pauseLabel  = isGoogleParentScope ? `Tắt toàn bộ quảng cáo trong ${obj}`  : `Tắt ${obj}`;
   return [
-    { key: 'enable', label: `Bật ${obj}`, color: 'green' },
-    { key: 'pause', label: `Tắt ${obj}`, color: 'red' },
+    { key: 'enable', label: enableLabel, color: 'green' },
+    { key: 'pause', label: pauseLabel, color: 'red' },
     { key: 'notify', label: 'Gửi thông báo email', color: 'blue' },
     { key: 'warn_complete', label: 'Cảnh báo sắp hoàn thành', color: 'amber' },
     { key: 'warn_threshold', label: 'Cảnh báo sắp vượt ngưỡng', color: 'orange' },
@@ -541,7 +548,7 @@ function RuleCard({ rule, onToggle, onRun, onEdit, onDelete, onDuplicate }) {
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] uppercase text-slate-500 font-medium tracking-wide mr-1">Hành động:</span>
         {actions.map((a, i) => {
-          const at = getActionTypes(rule.scope).find(t => t.key === a.type);
+          const at = getActionTypes(rule.scope, rule.platform).find(t => t.key === a.type);
           const colorClass = {
             green: 'bg-emerald-50 text-emerald-700 border-emerald-200',
             red: 'bg-red-50 text-red-700 border-red-200',
@@ -1015,7 +1022,7 @@ function RuleFormModal({ rule, initialData, platform, accounts, existingGroups =
           <div>
             <label className="label">Hành động *</label>
             <div className="grid grid-cols-2 gap-2">
-              {getActionTypes(scope).map(at => {
+              {getActionTypes(scope, platform).map(at => {
                 const isSelected = action === at.key;
                 const colorClass = {
                   green: isSelected ? 'bg-emerald-50 border-emerald-400 text-emerald-700' : 'bg-white border-slate-200 text-slate-600',
