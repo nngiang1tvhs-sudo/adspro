@@ -553,6 +553,62 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
   }
 };
 
+// TikTok quản lý Smart+ Campaign/AdGroup/Ad qua 1 namespace API riêng
+// (/smart_plus/...) — endpoint thường bị chặn với lỗi "Changes can't be
+// made to creative assets that were auto-generated in a Smart+ campaign"
+// (code 40002) vì asset là do TikTok tự sinh. Field id list ở campaign/ad_group
+// giữ nguyên tên, riêng ad phải đổi 'ad_ids' -> 'smart_plus_ad_ids'.
+const OPERATION_ENDPOINTS = {
+  campaign: {
+    regular: '/campaign/status/update/',
+    smart: ['/smart_plus/campaign/status/update/', '/smartplus/campaign/status/update/'],
+    idKey: 'campaign_ids',
+  },
+  ad_group: {
+    regular: '/adgroup/status/update/',
+    smart: ['/smart_plus/adgroup/status/update/'],
+    idKey: 'adgroup_ids',
+  },
+  ad: {
+    regular: '/ad/status/update/',
+    smart: ['/smart_plus/ad/status/update/'],
+    idKey: 'ad_ids',
+    smartIdKey: 'smart_plus_ad_ids',
+  },
+};
+
+const isSmartPlusRestriction = (message = '') => /smart\+|auto-generated/i.test(message);
+
+/**
+ * Gọi endpoint status/update thường; nếu TikTok từ chối vì đối tượng thuộc
+ * Smart+ Campaign thì tự động thử lại qua endpoint smart_plus/* tương ứng.
+ */
+const updateOperationStatus = async (accessToken, advertiserId, externalId, scope, operation) => {
+  const cfg = OPERATION_ENDPOINTS[scope];
+  const regularBody = { advertiser_id: advertiserId, [cfg.idKey]: [externalId], operation_status: operation };
+
+  try {
+    await apiCall(cfg.regular, accessToken, regularBody, 'POST');
+    return;
+  } catch (err) {
+    if (!isSmartPlusRestriction(err.message)) throw err;
+  }
+
+  const smartIdKey = cfg.smartIdKey || cfg.idKey;
+  const smartBody = { advertiser_id: advertiserId, [smartIdKey]: [externalId], operation_status: operation };
+
+  let lastErr;
+  for (const endpoint of cfg.smart) {
+    try {
+      await apiCall(endpoint, accessToken, smartBody, 'POST');
+      return;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr;
+};
+
 /**
  * Bật/tắt chiến dịch
  */
@@ -561,13 +617,9 @@ const toggleCampaignStatus = async (credentials, campaignExternalId, enable) => 
     const decrypted = decryptCredentials(credentials);
     const operation = enable ? 'ENABLE' : 'DISABLE';
 
-    await apiCall('/campaign/status/update/', decrypted.access_token, {
-      advertiser_id: decrypted.advertiser_id,
-      campaign_ids: [campaignExternalId],
-      operation_status: operation,
-    }, 'POST');
+    await updateOperationStatus(decrypted.access_token, decrypted.advertiser_id, campaignExternalId, 'campaign', operation);
 
-    return { success: true, status: enable ? 'ENABLE' : 'DISABLE' };
+    return { success: true, status: operation };
   } catch (err) {
     logger.error('TikTok toggleCampaign error:', err.message);
     throw new Error(`Không thể ${enable ? 'bật' : 'tắt'} chiến dịch TikTok: ${err.message}`);
@@ -581,21 +633,10 @@ const toggleObjectStatus = async (credentials, externalId, scope, enable) => {
   const decrypted = decryptCredentials(credentials);
   const operation = enable ? 'ENABLE' : 'DISABLE';
   try {
-    if (scope === 'ad_group') {
-      await apiCall('/adgroup/status/update/', decrypted.access_token, {
-        advertiser_id: decrypted.advertiser_id,
-        adgroup_ids: [externalId],
-        operation_status: operation,
-      }, 'POST');
-    } else if (scope === 'ad') {
-      await apiCall('/ad/status/update/', decrypted.access_token, {
-        advertiser_id: decrypted.advertiser_id,
-        ad_ids: [externalId],
-        operation_status: operation,
-      }, 'POST');
-    } else {
-      await toggleCampaignStatus(credentials, externalId, enable);
+    if (scope === 'campaign') {
+      return await toggleCampaignStatus(credentials, externalId, enable);
     }
+    await updateOperationStatus(decrypted.access_token, decrypted.advertiser_id, externalId, scope, operation);
     return { success: true };
   } catch (err) {
     logger.error(`TikTok toggleObjectStatus (${scope}) error:`, err.message);
