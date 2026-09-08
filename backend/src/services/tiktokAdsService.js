@@ -578,6 +578,24 @@ const OPERATION_ENDPOINTS = {
 };
 
 const isSmartPlusRestriction = (message = '') => /smart\+|auto-generated/i.test(message);
+const isNotSmartPlusAd = (message = '') => /not a smart plus ad/i.test(message);
+
+/**
+ * Với ad thuộc Smart+ Campaign, "ad_id" thường (từ /ad/get/) chỉ là ID cấp
+ * creative — không phải "smart_plus_ad_id" (ID của Smart+ Ad cha, nằm giữa
+ * ad group và creative trong cấu trúc Smart+). API smart_plus/ad/status/update/
+ * chỉ chấp nhận smart_plus_ad_id. TikTok trả field này ngay trên response
+ * /ad/get/ nên tra lại đúng ad đó để lấy ra.
+ */
+const resolveSmartPlusAdId = async (accessToken, advertiserId, adExternalId) => {
+  const data = await apiCall('/ad/get/', accessToken, {
+    advertiser_id: advertiserId,
+    filtering: JSON.stringify({ ad_ids: [adExternalId] }),
+    page_size: 1,
+  });
+  const ad = (data.list || [])[0];
+  return ad?.smart_plus_ad_id || null;
+};
 
 /**
  * Gọi endpoint status/update thường; nếu TikTok từ chối vì đối tượng thuộc
@@ -594,8 +612,17 @@ const updateOperationStatus = async (accessToken, advertiserId, externalId, scop
     if (!isSmartPlusRestriction(err.message)) throw err;
   }
 
+  let smartTargetId = externalId;
+  if (scope === 'ad') {
+    const smartPlusAdId = await resolveSmartPlusAdId(accessToken, advertiserId, externalId);
+    if (!smartPlusAdId) {
+      throw new Error('Ad thuộc Smart+ Campaign nhưng không tìm được smart_plus_ad_id tương ứng');
+    }
+    smartTargetId = smartPlusAdId;
+  }
+
   const smartIdKey = cfg.smartIdKey || cfg.idKey;
-  const smartBody = { advertiser_id: advertiserId, [smartIdKey]: [externalId], operation_status: operation };
+  const smartBody = { advertiser_id: advertiserId, [smartIdKey]: [smartTargetId], operation_status: operation };
 
   let lastErr;
   for (const endpoint of cfg.smart) {
@@ -604,6 +631,8 @@ const updateOperationStatus = async (accessToken, advertiserId, externalId, scop
       return;
     } catch (err) {
       lastErr = err;
+      // Nếu ID resolve sai (không đúng smart_plus_ad_id), không thử tiếp các endpoint dự phòng
+      if (isNotSmartPlusAd(err.message)) break;
     }
   }
   throw lastErr;
