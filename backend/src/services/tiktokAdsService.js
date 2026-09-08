@@ -505,12 +505,32 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
       logger.warn('TikTok ad insights error:', insightErr.message);
     }
 
+    // Với ad thuộc Smart+ Campaign, operation_status trên /ad/get/ (entity
+    // cấp creative chung chung) không phản ánh đúng trạng thái bật/tắt thật —
+    // trạng thái thật nằm ở entity smart_plus_ad_id riêng. Lấy bổ sung để hiển thị đúng.
+    const smartPlusAdIds = [...new Set(ads.map(a => a.smart_plus_ad_id).filter(Boolean))];
+    let smartStatusMap = {};
+    if (smartPlusAdIds.length > 0) {
+      try {
+        const smartData = await apiCall('/smart_plus/ad/get/', decrypted.access_token, {
+          advertiser_id: decrypted.advertiser_id,
+          filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
+          page_size: smartPlusAdIds.length,
+        });
+        (smartData.list || []).forEach(sa => {
+          smartStatusMap[sa.smart_plus_ad_id] = sa.operation_status;
+        });
+      } catch (smartStatusErr) {
+        logger.warn('TikTok getAds: không lấy được trạng thái Smart+ Ad:', smartStatusErr.message);
+      }
+    }
+
     return ads.map(ad => {
       const m = insightsMap[ad.ad_id] || {};
       return {
         external_id: ad.ad_id,
         name: ad.ad_name,
-        status: ad.operation_status,
+        status: smartStatusMap[ad.smart_plus_ad_id] || ad.operation_status,
         ad_type: ad.ad_format,
         video_url: ad.video_id ? `https://www.tiktok.com/video/${ad.video_id}` : null,
         image_url: ad.image_ids?.[0] || null,
