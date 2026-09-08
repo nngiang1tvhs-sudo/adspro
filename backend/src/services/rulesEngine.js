@@ -561,11 +561,27 @@ const executeRule = async (rule, options = {}) => {
       } else if (Object.keys(apiItemsMap).length > 0) {
         // Dùng API items cho ad_group/ad — không cần DB
         const type = rule.scope;
+
+        // Một số item (vd. ad Smart+ của TikTok) có thể trả status = null khi
+        // API tra cứu trạng thái thật bị lỗi thoáng qua — fallback về status
+        // đã biết trong DB (được rulesEngine tự cập nhật sau lần chạy thành
+        // công gần nhất) để không hiểu nhầm "đang chạy" rồi trigger/gửi mail lặp.
+        const itemsNeedingFallback = Object.values(apiItemsMap).filter(item => !item.status);
+        let dbStatusMap = {};
+        if (itemsNeedingFallback.length > 0) {
+          const table = type === 'ad' ? 'ads' : 'ad_groups';
+          const dbRes = await query(
+            `SELECT external_id, status FROM ${table} WHERE account_id = $1 AND external_id = ANY($2)`,
+            [account.id, itemsNeedingFallback.map(i => String(i.external_id))]
+          );
+          dbRes.rows.forEach(r => { dbStatusMap[String(r.external_id)] = r.status; });
+        }
+
         let apiItems = Object.values(apiItemsMap).map(item => ({
           id: item.external_id, // dùng external_id làm id proxy (không có DB id)
           external_id: item.external_id,
           name: item.name,
-          status: item.status,
+          status: item.status || dbStatusMap[String(item.external_id)] || null,
           type,
         }));
 

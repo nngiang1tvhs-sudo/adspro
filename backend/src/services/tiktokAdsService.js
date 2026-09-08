@@ -613,17 +613,23 @@ const fetchSmartPlusAdStatusMap = async (accessToken, advertiserId, rawAds) => {
   if (smartPlusAdIds.length === 0) return {};
 
   const statusMap = {};
-  try {
-    const smartData = await apiCall('/smart_plus/ad/get/', accessToken, {
-      advertiser_id: advertiserId,
-      filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
-      page_size: smartPlusAdIds.length,
-    });
-    (smartData.list || []).forEach(sa => {
-      statusMap[sa.smart_plus_ad_id] = sa.operation_status;
-    });
-  } catch (err) {
-    logger.warn('TikTok: không lấy được trạng thái Smart+ Ad:', err.message);
+  // Thử tối đa 2 lần — lỗi mạng/API thoáng qua không nên khiến rules engine
+  // âm thầm rơi về operation_status (không đáng tin cho ad Smart+, xem
+  // updateOperationStatus) và đánh giá sai trạng thái đã tắt/bật.
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const smartData = await apiCall('/smart_plus/ad/get/', accessToken, {
+        advertiser_id: advertiserId,
+        filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
+        page_size: smartPlusAdIds.length,
+      });
+      (smartData.list || []).forEach(sa => {
+        statusMap[sa.smart_plus_ad_id] = sa.operation_status;
+      });
+      return statusMap;
+    } catch (err) {
+      logger.warn(`TikTok: không lấy được trạng thái Smart+ Ad (lần ${attempt}):`, err.message);
+    }
   }
   return statusMap;
 };
@@ -794,12 +800,21 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         const smartStatusMap = await fetchSmartPlusAdStatusMap(decrypted.access_token, decrypted.advertiser_id, rawAds);
         map['__items__'] = rawAds
           .filter(ad => map[String(ad.ad_id)] !== undefined)
-          .map(ad => ({
-            external_id: String(ad.ad_id),
-            name: ad.ad_name,
-            status: smartStatusMap[ad.smart_plus_ad_id] || ad.operation_status || ad.primary_status,
-            campaign_external_id: ad.campaign_id ? String(ad.campaign_id) : null,
-          }));
+          .map(ad => {
+            // Ad Smart+ mà không tra được trạng thái thật (API lỗi thoáng qua)
+            // → để status = null (không xác định) thay vì rơi về operation_status
+            // (đã biết là sai với ad Smart+) — rulesEngine sẽ tự fallback về DB
+            // để tránh coi nhầm là "đang chạy" rồi trigger + gửi mail lặp.
+            const status = ad.smart_plus_ad_id
+              ? (smartStatusMap[ad.smart_plus_ad_id] || null)
+              : (ad.operation_status || ad.primary_status);
+            return {
+              external_id: String(ad.ad_id),
+              name: ad.ad_name,
+              status,
+              campaign_external_id: ad.campaign_id ? String(ad.campaign_id) : null,
+            };
+          });
       }
     } catch (listErr) {
       logger.warn(`TikTok getAllScopeMetrics: không lấy được metadata items: ${listErr.message}`);
