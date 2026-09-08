@@ -508,22 +508,7 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
     // Với ad thuộc Smart+ Campaign, operation_status trên /ad/get/ (entity
     // cấp creative chung chung) không phản ánh đúng trạng thái bật/tắt thật —
     // trạng thái thật nằm ở entity smart_plus_ad_id riêng. Lấy bổ sung để hiển thị đúng.
-    const smartPlusAdIds = [...new Set(ads.map(a => a.smart_plus_ad_id).filter(Boolean))];
-    let smartStatusMap = {};
-    if (smartPlusAdIds.length > 0) {
-      try {
-        const smartData = await apiCall('/smart_plus/ad/get/', decrypted.access_token, {
-          advertiser_id: decrypted.advertiser_id,
-          filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
-          page_size: smartPlusAdIds.length,
-        });
-        (smartData.list || []).forEach(sa => {
-          smartStatusMap[sa.smart_plus_ad_id] = sa.operation_status;
-        });
-      } catch (smartStatusErr) {
-        logger.warn('TikTok getAds: không lấy được trạng thái Smart+ Ad:', smartStatusErr.message);
-      }
-    }
+    const smartStatusMap = await fetchSmartPlusAdStatusMap(decrypted.access_token, decrypted.advertiser_id, ads);
 
     return ads.map(ad => {
       const m = insightsMap[ad.ad_id] || {};
@@ -615,6 +600,32 @@ const resolveSmartPlusAdId = async (accessToken, advertiserId, adExternalId) => 
   });
   const ad = (data.list || [])[0];
   return ad?.smart_plus_ad_id || null;
+};
+
+/**
+ * Với danh sách ad (raw item từ /ad/get/), trả về map
+ * { smart_plus_ad_id -> operation_status thật } cho các ad thuộc Smart+ Campaign
+ * (dùng để hiển thị/đánh giá đúng trạng thái, vì operation_status trên chính
+ * entity ad_id không phản ánh trạng thái bật/tắt thật của Smart+ Ad).
+ */
+const fetchSmartPlusAdStatusMap = async (accessToken, advertiserId, rawAds) => {
+  const smartPlusAdIds = [...new Set(rawAds.map(a => a.smart_plus_ad_id).filter(Boolean))];
+  if (smartPlusAdIds.length === 0) return {};
+
+  const statusMap = {};
+  try {
+    const smartData = await apiCall('/smart_plus/ad/get/', accessToken, {
+      advertiser_id: advertiserId,
+      filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
+      page_size: smartPlusAdIds.length,
+    });
+    (smartData.list || []).forEach(sa => {
+      statusMap[sa.smart_plus_ad_id] = sa.operation_status;
+    });
+  } catch (err) {
+    logger.warn('TikTok: không lấy được trạng thái Smart+ Ad:', err.message);
+  }
+  return statusMap;
 };
 
 /**
@@ -776,12 +787,17 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
           advertiser_id: decrypted.advertiser_id,
           page_size: 1000,
         });
-        map['__items__'] = (listData.list || [])
+        const rawAds = listData.list || [];
+        // operation_status trên entity ad_id không phản ánh đúng trạng thái
+        // thật của ad thuộc Smart+ Campaign — lấy đè từ entity smart_plus_ad_id
+        // để rules engine không nhận định sai (dẫn đến chạy lại rule/gửi mail lặp).
+        const smartStatusMap = await fetchSmartPlusAdStatusMap(decrypted.access_token, decrypted.advertiser_id, rawAds);
+        map['__items__'] = rawAds
           .filter(ad => map[String(ad.ad_id)] !== undefined)
           .map(ad => ({
             external_id: String(ad.ad_id),
             name: ad.ad_name,
-            status: ad.operation_status || ad.primary_status,
+            status: smartStatusMap[ad.smart_plus_ad_id] || ad.operation_status || ad.primary_status,
             campaign_external_id: ad.campaign_id ? String(ad.campaign_id) : null,
           }));
       }
