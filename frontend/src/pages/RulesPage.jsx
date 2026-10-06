@@ -3,6 +3,7 @@ import PlatformTabs from '../components/PlatformTabs';
 import { rulesApi, dashboardApi, campaignsApi } from '../services/api';
 import { PLATFORM_LABELS, timeAgo } from '../utils/helpers';
 import toast from 'react-hot-toast';
+import { makeRuleRunResult, makeRuleRunError, getRuleRunSummary } from '../utils/ruleRunResult';
 import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle, Search, CheckSquare, Copy } from 'lucide-react';
 
 const METRICS_BY_PLATFORM = {
@@ -164,6 +165,8 @@ export default function RulesPage() {
   const [editingRule, setEditingRule] = useState(null);
   const [duplicateFrom, setDuplicateFrom] = useState(null);
   const [debugResult, setDebugResult] = useState(null);
+  const [debugPage, setDebugPage] = useState(0);
+  const debugPageSize = 50;
 
   useEffect(() => {
     loadAccounts();
@@ -211,25 +214,24 @@ export default function RulesPage() {
     const t = toast.loading('Đang chạy rule...');
     try {
       const res = await rulesApi.run(rule.id);
-      const result = res.data;
-      // Cập nhật ngay lập tức số lần chạy mà không cần đợi reload
-      setRules(prev => prev.map(r =>
-        r.id === rule.id
-          ? { ...r, total_runs: (r.total_runs || 0) + 1, last_run_at: new Date().toISOString() }
-          : r
-      ));
+      const result = makeRuleRunResult(rule.name, res.data);
+      setDebugPage(0);
+      setDebugResult(result);
+      // The database count is authoritative; a locked/skipped run does not increment it.
       if (!result.success) {
         toast.error(result.message || 'Rule không thể chạy', { id: t });
+      } else if (result.skipped) {
+        toast(result.message || 'Rule đang được thực thi', { id: t, icon: 'ℹ️' });
       } else if (result.triggered > 0) {
         toast.success(`Rule đã trigger ${result.triggered} đối tượng`, { id: t });
       } else {
-        toast(`Không có đối tượng nào thỏa điều kiện — xem chi tiết bên dưới`, { id: t, icon: 'ℹ️' });
-      }
-      if (result.debug?.length > 0) {
-        setDebugResult({ ruleName: rule.name, ...result });
+        toast(getRuleRunSummary(result), { id: t, icon: 'ℹ️' });
       }
     } catch (err) {
-      toast.error(err.message || 'Lỗi khi chạy rule', { id: t });
+      const result = makeRuleRunError(rule.name, err);
+      setDebugPage(0);
+      setDebugResult(result);
+      toast.error(result.message, { id: t });
     } finally {
       await loadRules(true);
     }
@@ -351,10 +353,25 @@ export default function RulesPage() {
             </div>
             <div className="p-4 space-y-3 max-h-[70vh] overflow-y-auto">
               <div className="text-sm text-slate-500">
-                Trigger: <span className="font-semibold text-slate-800">{debugResult.triggered}</span> |
-                Thời gian: <span className="font-semibold text-slate-800">{debugResult.duration}ms</span>
+                Trigger: <span className="font-semibold text-slate-800">{debugResult.triggered ?? 'Chưa xác định'}</span> |
+                Thời gian: <span className="font-semibold text-slate-800">{debugResult.duration == null ? 'Chưa xác định' : `${debugResult.duration}ms`}</span>
               </div>
-              {debugResult.debug.map((d, i) => (
+              {debugResult.message && (
+                <div role="status" className={`text-sm rounded-lg p-3 ${debugResult.success ? 'bg-blue-50 text-blue-800' : 'bg-red-50 text-red-800'}`}>
+                  {debugResult.message}
+                </div>
+              )}
+              {debugResult.debug.length === 0 && (
+                <p className="text-sm text-slate-500">Không có chi tiết đánh giá đối tượng được trả về.</p>
+              )}
+              {debugResult.debug.length > debugPageSize && (
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <button type="button" className="btn-secondary" disabled={debugPage === 0} onClick={() => setDebugPage(p => p - 1)}>Trang trước</button>
+                  <span>Trang {debugPage + 1}/{Math.ceil(debugResult.debug.length / debugPageSize)} · {debugResult.debug.length} kết quả</span>
+                  <button type="button" className="btn-secondary" disabled={(debugPage + 1) * debugPageSize >= debugResult.debug.length} onClick={() => setDebugPage(p => p + 1)}>Trang sau</button>
+                </div>
+              )}
+              {debugResult.debug.slice(debugPage * debugPageSize, (debugPage + 1) * debugPageSize).map((d, i) => (
                 <div key={i} className={`border rounded-lg p-3 text-sm ${
                   d.noTargets ? 'border-orange-300 bg-orange-50'
                   : d.passed && !d.skipped ? 'border-emerald-300 bg-emerald-50'
@@ -363,7 +380,7 @@ export default function RulesPage() {
                 }`}>
                   <div className="flex items-center gap-2 mb-2 flex-wrap">
                     <span className="font-medium text-slate-800">{d.target}</span>
-                    {d.status && <span className="text-xs text-slate-400">({d.status})</span>}
+                    {d.status && <span className="text-xs text-slate-400">({d.status}{d.status_source === 'db_fallback' ? ' · trạng thái lưu trong DB' : ''})</span>}
                     {d.noTargets && <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded">⚠ Không tìm thấy đối tượng</span>}
                     {!d.noTargets && d.passed && !d.skipped && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">✓ TRIGGER</span>}
                     {!d.noTargets && d.skipped && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded">BỎ QUA: {d.skipped}</span>}
@@ -376,6 +393,14 @@ export default function RulesPage() {
                   </div>
                   {d.noTargets && d.noTargetsReason && (
                     <div className="text-xs text-orange-700 bg-orange-100 rounded px-2 py-1">{d.noTargetsReason}</div>
+                  )}
+                  {d.diagnostics && (
+                    <div className="text-xs text-slate-600 rounded bg-slate-50 p-2 space-y-1">
+                      <p>Quảng cáo có dữ liệu chi phí: {Object.entries(d.diagnostics.api_metric_items || {}).map(([range, count]) => `${range}: ${count}`).join(', ')}</p>
+                      <p>Thông tin quảng cáo từ API: {d.diagnostics.api_metadata_items}</p>
+                      {d.diagnostics.matched_selected_campaigns !== null && <p>Chiến dịch đã chọn tìm thấy: {d.diagnostics.matched_selected_campaigns}</p>}
+                      <p>Đối tượng sau lọc chiến dịch: {d.diagnostics.targets_before_status_filter} · Sau lọc trạng thái: {d.diagnostics.targets_after_status_filter} · Thiếu trạng thái: {d.diagnostics.unknown_status_targets}</p>
+                    </div>
                   )}
                   {d.evaluations?.map((ev, j) => (
                     ev.type === 'group' ? (

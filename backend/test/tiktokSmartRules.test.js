@@ -13,14 +13,14 @@ const load = (file, mocks) => {
 };
 const logger = { info() {}, warn() {}, error() {} };
 const dates = { from: '2026-04-10', to: '2026-10-06' };
-const fixture = ({ unknown = false, failReport = false, smartStatus = 'ENABLE' } = {}) => {
+const fixture = ({ unknown = false, failReport = false, smartStatus = 'ENABLE', omitLastCampaign = true } = {}) => {
   const calls = [];
   const ads = Array.from({ length: 101 }, (_, i) => ({
     ad_id: String(9000000000000000000n + BigInt(i)),
     smart_plus_ad_id: String(9100000000000000000n + BigInt(i)),
     ad_name: i === 100 ? 'Video 50K' : 'Video khác', operation_status: 'ENABLE',
     // Last creative lacks campaign_id: use authoritative Smart+ metadata.
-    ...(i === 100 ? {} : { campaign_id: 'campaign' }),
+    ...(i === 100 && omitLastCampaign ? {} : { campaign_id: 'campaign' }),
   }));
   const axios = async config => {
     const endpoint = config.url.split('/v1.3')[1];
@@ -50,8 +50,8 @@ const fixture = ({ unknown = false, failReport = false, smartStatus = 'ENABLE' }
       data = {};
     } else throw new Error('Unexpected endpoint ' + endpoint);
     if (list) {
-      const page = params.page || 1, size = params.page_size || 100;
-      assert(size <= 100);
+      const page = params.page || 1, size = Math.min(params.page_size || 100, 100);
+      assert(size <= (endpoint === '/smart_plus/ad/get/' ? 100 : 1000));
       data = { list: list.slice((page - 1) * size, page * size), page_info: { total_page: Math.max(1, Math.ceil(list.length / size)) } };
     }
     return { data: { code: 0, data } };
@@ -91,8 +91,8 @@ test('report errors propagate instead of becoming an empty successful rules resu
   await assert.rejects(service.getAllScopeMetrics(creds, dates, 'ad'), /report unavailable/);
 });
 
-const runRule = async ({ unknown = false, failReport = false, smartStatus = 'ENABLE' } = {}) => {
-  const { service, creds, calls } = fixture({ unknown, failReport, smartStatus });
+const runRule = async ({ unknown = false, failReport = false, smartStatus = 'ENABLE', cachedStatus = null, matchedCampaign = true, locked = false, omitLastCampaign = true, notify = false } = {}) => {
+  const { service, creds, calls } = fixture({ unknown, failReport, smartStatus, omitLastCampaign });
   // Keep the actual service's report query at the screenshot's 180-day interval.
   const actualGet = service.getAllScopeMetrics;
   service.getAllScopeMetrics = (credentials, range, scope) => {
@@ -101,26 +101,28 @@ const runRule = async ({ unknown = false, failReport = false, smartStatus = 'ENA
     return actualGet(credentials, dates, scope);
   };
   const queries = [];
+  const notifications = [];
   const query = async (sql, params) => {
     queries.push(sql);
-    if (sql.includes('RETURNING id')) return { rowCount: 1, rows: [{ id: 1 }] };
+    if (sql.includes('RETURNING id')) return locked ? { rowCount: 0, rows: [] } : { rowCount: 1, rows: [{ id: 1 }] };
     if (sql.includes('FROM ad_accounts')) return { rowCount: 1, rows: [{ id: 1, platform: 'tiktok', credentials: creds }] };
-    if (sql.includes('SELECT external_id FROM campaigns')) return { rows: [{ external_id: 'campaign' }] };
+    if (sql.includes('SELECT external_id FROM campaigns')) return { rows: matchedCampaign ? [{ external_id: 'campaign' }] : [] };
+    if (sql.includes('SELECT external_id, status FROM ads')) return { rows: cachedStatus ? [{ external_id: '9000000000000000100', status: cachedStatus }] : [] };
     return { rowCount: 0, rows: [] };
   };
   const engine = load('services/rulesEngine.js', {
     '../config/database': { query }, './platformService': { getService: () => service },
     '../utils/logger': logger, '../utils/audit': { logEvent: async () => {}, EVENT_TYPES: {} },
-    './emailService': { sendRuleNotification: async () => { throw new Error('No external email allowed in tests'); } },
+    './emailService': { sendRuleNotification: async payload => { notifications.push(payload); } },
   });
   const result = await engine.executeRule({
     id: 1, account_id: 1, platform: 'tiktok', scope: 'ad', name: 'Tắt quảng cáo 50K',
     target_mode: 'specific', target_ids: [1], target_status_filter: 'active',
-    conditions_logic: 'AND', cooldown_minutes: 8, email_notify: false,
-    conditions: [{ metric: 'spend', operator: '>', value: 45000, timeRange: '180d' },
-      { metric: 'name', operator: 'contains', value: '50K' }], actions: [{ type: 'pause' }],
+    conditions_logic: 'AND', cooldown_minutes: 8, email_notify: notify,
+    conditions: notify ? [{ metric: 'spend', operator: '>', value: 1000, timeRange: '180d' }] : [{ metric: 'spend', operator: '>', value: 45000, timeRange: '180d' },
+      { metric: 'name', operator: 'contains', value: '50K' }], actions: [{ type: notify ? 'notify' : 'pause' }],
   }, { bypassCooldown: true });
-  return { result, calls, queries };
+  return { result, calls, queries, notifications };
 };
 
 test('screenshot rule pauses only matching active ad in selected campaign using Smart+ ID', async () => {
@@ -132,11 +134,11 @@ test('screenshot rule pauses only matching active ad in selected campaign using 
   assert.equal(calls.filter(c => c.endpoint === '/smart_plus/ad/status/update/').length, 1);
 });
 
-test('unknown live status skips action and reports why without stale DB fallback', async () => {
+test('unknown status without a DB fallback reports why and never acts', async () => {
   const { result, calls, queries } = await runRule({ unknown: true });
   assert.equal(result.triggered, 0);
-  assert(result.debug.some(d => d.skipped?.includes('Smart+')));
-  assert(!queries.some(sql => sql.includes('SELECT external_id, status FROM ads')));
+  assert(result.debug.some(d => d.skipped?.includes('Chưa xác định')));
+  assert(queries.some(sql => sql.includes('SELECT external_id, status FROM ads')));
   assert(!calls.some(c => c.endpoint.includes('status/update')));
 });
 
@@ -151,5 +153,37 @@ test('failed report records rule failure without changing any ads', async () => 
   const { result, calls } = await runRule({ smartStatus: 'DISABLE' });
   assert.equal(result.triggered, 0);
   assert(result.debug.some(d => d.noTargetsReason?.includes('trạng thái')));
+  assert(!calls.some(c => c.endpoint.includes('status/update')));
+});
+
+ test('existing DB status fallback retains a matching active Smart+ target', async () => {
+  const { result } = await runRule({ unknown: true, cachedStatus: 'ENABLE', omitLastCampaign: false });
+  assert.equal(result.triggered, 1);
+  const target = result.debug.find(d => d.target === 'Video 50K');
+  assert.equal(target.status_source, 'db_fallback');
+  assert.equal(target.passed, true);
+});
+
+ test('selected campaign not found reports parent lookup failure rather than unmet cost', async () => {
+  const { result } = await runRule({ matchedCampaign: false });
+  assert.equal(result.triggered, 0);
+  const empty = result.debug.find(d => d.noTargets);
+  assert.match(empty.noTargetsReason, /Không tìm thấy chiến dịch/);
+  assert.equal(empty.diagnostics.matched_selected_campaigns, 0);
+  assert.equal(empty.diagnostics.api_metadata_items, 101);
+});
+
+ test('worker lock skips the run before any TikTok read or action', async () => {
+  const { result, calls } = await runRule({ locked: true });
+  assert.equal(result.skipped, true);
+  assert.equal(result.triggered, 0);
+  assert.equal(calls.length, 0);
+});
+
+ test('notification screenshot: cost >1000 over 180 days sends matching notifications, not no-targets', async () => {
+  const { result, notifications, calls } = await runRule({ notify: true });
+  assert.equal(result.triggered, 101);
+  assert.equal(notifications.length, 101);
+  assert(!result.debug.some(d => d.noTargets));
   assert(!calls.some(c => c.endpoint.includes('status/update')));
 });

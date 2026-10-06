@@ -32,7 +32,7 @@ api.interceptors.response.use(
       }
     }
 
-    return Promise.reject({ message, status, data: error.response?.data });
+    return Promise.reject({ message, status, code: error.code, data: error.response?.data });
   }
 );
 

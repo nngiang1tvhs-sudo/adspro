@@ -55,7 +55,7 @@ const apiCall = async (endpoint, accessToken, params = {}, method = 'GET') => {
 // Read every API page. A single account may contain more ads than one page.
 const getAllPages = async (endpoint, accessToken, params = {}) => {
   const list = [];
-  const pageSize = Math.min(params.page_size || 100, 100);
+  const pageSize = params.page_size || 100;
   for (let page = 1; ; page++) {
     const data = await apiCall(endpoint, accessToken, { ...params, page_size: pageSize, page });
     const rows = data.list || [];
@@ -212,7 +212,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
     // Wrap insights trong try-catch — nếu lỗi, campaigns vẫn hiển thị (metrics = 0)
     const insightsMap = {};
     try {
-      const insightsData = await getAllPages('/report/integrated/get/', decrypted.access_token, reportParams);
+      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, reportParams);
       (insightsData.list || []).forEach(item => {
         insightsMap[item.dimensions.campaign_id] = item.metrics;
       });
@@ -236,7 +236,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
             end_date: fallbackEnd,
           };
           delete fallbackParams.lifetime;
-          const fallbackData = await getAllPages('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
           (fallbackData.list || []).forEach(item => {
             insightsMap[item.dimensions.campaign_id] = item.metrics;
           });
@@ -336,7 +336,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    const data = await getAllPages('/adgroup/get/', decrypted.access_token, {
+    const data = await apiCall('/adgroup/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       filtering: JSON.stringify({ campaign_ids: [campaignExternalId] }),
       page_size: 200,
@@ -381,7 +381,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         adgroupReportParams.end_date = endDate;
       }
       try {
-        const insightsData = await getAllPages('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
+        const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
         (insightsData.list || []).forEach(item => {
           insightsMap[item.dimensions.adgroup_id] = item.metrics;
         });
@@ -392,7 +392,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
           const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           const fallbackParams = { ...adgroupReportParams, start_date: fallbackStart, end_date: fallbackEnd };
           delete fallbackParams.lifetime;
-          const fallbackData = await getAllPages('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
           (fallbackData.list || []).forEach(item => {
             insightsMap[item.dimensions.adgroup_id] = item.metrics;
           });
@@ -854,7 +854,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
     const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const endDate = dateRange.to || today.toISOString().split('T')[0];
 
-    const data = await getAllPages('/report/integrated/get/', decrypted.access_token, {
+    const data = await apiCall('/report/integrated/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       report_type: 'BASIC',
       data_level: 'AUCTION_CAMPAIGN',
