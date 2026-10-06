@@ -29,3 +29,15 @@ export const getRuleRunSummary = (result) => {
   if (result.debug.some(d => d.skipped)) return 'Có đối tượng bị bỏ qua — xem lý do trong kết quả chạy';
   return 'Không có đối tượng nào thỏa điều kiện — xem chi tiết bên dưới';
 };
+
+// Keep every row and its original content; show triggered evaluations first, then unmet conditions.
+export const groupRuleRunDetails = (details) => {
+  const unmet = [], matched = [], skipped = [], diagnostics = [];
+  for (const detail of details) {
+    if (detail.skipped) skipped.push(detail);
+    else if (detail.noTargets) diagnostics.push(detail);
+    else if (detail.passed) matched.push(detail);
+    else unmet.push(detail);
+  }
+  return { evaluated: [...matched, ...unmet, ...diagnostics], skipped };
+};

@@ -1,9 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import PlatformTabs from '../components/PlatformTabs';
 import { rulesApi, dashboardApi, campaignsApi } from '../services/api';
 import { PLATFORM_LABELS, timeAgo } from '../utils/helpers';
 import toast from 'react-hot-toast';
-import { makeRuleRunResult, makeRuleRunError, getRuleRunSummary } from '../utils/ruleRunResult';
+import { makeRuleRunResult, makeRuleRunError, getRuleRunSummary, groupRuleRunDetails } from '../utils/ruleRunResult';
 import { Plus, Edit, Trash2, Play, X, Power, Mail, Clock, AlertCircle, Search, CheckSquare, Copy } from 'lucide-react';
 
 const METRICS_BY_PLATFORM = {
@@ -166,7 +166,9 @@ export default function RulesPage() {
   const [duplicateFrom, setDuplicateFrom] = useState(null);
   const [debugResult, setDebugResult] = useState(null);
   const [debugPage, setDebugPage] = useState(0);
-  const debugPageSize = 50;
+  const [skippedPage, setSkippedPage] = useState(0);
+  const [showSkipped, setShowSkipped] = useState(false);
+  const detailGroups = useMemo(() => groupRuleRunDetails(debugResult?.debug || []), [debugResult]);
 
   useEffect(() => {
     loadAccounts();
@@ -216,6 +218,8 @@ export default function RulesPage() {
       const res = await rulesApi.run(rule.id);
       const result = makeRuleRunResult(rule.name, res.data);
       setDebugPage(0);
+      setSkippedPage(0);
+      setShowSkipped(false);
       setDebugResult(result);
       // The database count is authoritative; a locked/skipped run does not increment it.
       if (!result.success) {
@@ -230,6 +234,8 @@ export default function RulesPage() {
     } catch (err) {
       const result = makeRuleRunError(rule.name, err);
       setDebugPage(0);
+      setSkippedPage(0);
+      setShowSkipped(false);
       setDebugResult(result);
       toast.error(result.message, { id: t });
     } finally {
@@ -364,15 +370,57 @@ export default function RulesPage() {
               {debugResult.debug.length === 0 && (
                 <p className="text-sm text-slate-500">Không có chi tiết đánh giá đối tượng được trả về.</p>
               )}
-              {debugResult.debug.length > debugPageSize && (
-                <div className="flex items-center justify-between gap-3 text-sm">
-                  <button type="button" className="btn-secondary" disabled={debugPage === 0} onClick={() => setDebugPage(p => p - 1)}>Trang trước</button>
-                  <span>Trang {debugPage + 1}/{Math.ceil(debugResult.debug.length / debugPageSize)} · {debugResult.debug.length} kết quả</span>
-                  <button type="button" className="btn-secondary" disabled={(debugPage + 1) * debugPageSize >= debugResult.debug.length} onClick={() => setDebugPage(p => p + 1)}>Trang sau</button>
+              {detailGroups.evaluated.length > 0 && (
+                <RuleDebugList items={detailGroups.evaluated} page={debugPage} onPageChange={setDebugPage} />
+              )}
+              {detailGroups.skipped.length > 0 && (
+                <div className="border-t border-slate-200 pt-3 space-y-3">
+                  <button
+                    type="button"
+                    aria-expanded={showSkipped}
+                    aria-controls="skipped-rule-results"
+                    onClick={() => setShowSkipped(value => !value)}
+                    className="w-full text-left text-sm font-medium text-amber-800 bg-amber-50 rounded-lg p-3 hover:bg-amber-100"
+                  >
+                    {showSkipped ? 'Ẩn' : 'Hiện'} đối tượng bị bỏ qua ({detailGroups.skipped.length})
+                  </button>
+                  {showSkipped && (
+                    <div id="skipped-rule-results" className="space-y-3">
+                      <RuleDebugList items={detailGroups.skipped} page={skippedPage} onPageChange={setSkippedPage} />
+                    </div>
+                  )}
                 </div>
               )}
-              {debugResult.debug.slice(debugPage * debugPageSize, (debugPage + 1) * debugPageSize).map((d, i) => (
-                <div key={i} className={`border rounded-lg p-3 text-sm ${
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Each section has its own page so skipped rows never crowd out active evaluations.
+function RuleDebugList({ items, page, onPageChange }) {
+  const pageSize = 50;
+  return (
+    <>
+      {items.length > pageSize && (
+        <div className="flex items-center justify-between gap-3 text-sm">
+          <button type="button" className="btn-secondary" disabled={page === 0} onClick={() => onPageChange(page - 1)}>Trang trước</button>
+          <span>Trang {page + 1}/{Math.ceil(items.length / pageSize)} · {items.length} kết quả</span>
+          <button type="button" className="btn-secondary" disabled={(page + 1) * pageSize >= items.length} onClick={() => onPageChange(page + 1)}>Trang sau</button>
+        </div>
+      )}
+      {items.slice(page * pageSize, (page + 1) * pageSize).map((detail, index) => (
+        <RuleDebugRow key={page * pageSize + index} d={detail} />
+      ))}
+    </>
+  );
+}
+
+function RuleDebugRow({ d }) {
+  return (
+                <div className={`border rounded-lg p-3 text-sm ${
                   d.noTargets ? 'border-orange-300 bg-orange-50'
                   : d.passed && !d.skipped ? 'border-emerald-300 bg-emerald-50'
                   : d.skipped ? 'border-amber-300 bg-amber-50'
@@ -429,12 +477,6 @@ export default function RulesPage() {
                     )
                   ))}
                 </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
   );
 }
 
