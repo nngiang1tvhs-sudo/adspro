@@ -513,6 +513,7 @@ const executeRule = async (rule, options = {}) => {
           }
         } catch (err) {
           logger.warn(`Rule ${rule.id}: Lỗi lấy dữ liệu API ${tr}: ${err.message}`);
+          if (account.platform === 'tiktok') throw err;
         }
       }
 
@@ -562,11 +563,9 @@ const executeRule = async (rule, options = {}) => {
         // Dùng API items cho ad_group/ad — không cần DB
         const type = rule.scope;
 
-        // Một số item (vd. ad Smart+ của TikTok) có thể trả status = null khi
-        // API tra cứu trạng thái thật bị lỗi thoáng qua — fallback về status
-        // đã biết trong DB (được rulesEngine tự cập nhật sau lần chạy thành
-        // công gần nhất) để không hiểu nhầm "đang chạy" rồi trigger/gửi mail lặp.
-        const itemsNeedingFallback = Object.values(apiItemsMap).filter(item => !item.status);
+        // Only fall back for other platforms. A cached TikTok creative status
+        // cannot establish the current operation status of a Smart+ ad.
+        const itemsNeedingFallback = Object.values(apiItemsMap).filter(item => !item.status && account.platform !== 'tiktok');
         let dbStatusMap = {};
         if (itemsNeedingFallback.length > 0) {
           const table = type === 'ad' ? 'ads' : 'ad_groups';
@@ -658,6 +657,21 @@ const executeRule = async (rule, options = {}) => {
         }
       }
 
+      // Unknown live TikTok status is not equivalent to paused or running.
+      // Show why each target was skipped rather than hiding it as "no targets".
+      const unknownStatusTargets = account.platform === 'tiktok' && rule.scope === 'ad'
+        ? targets.filter(t => !t.status) : [];
+      if (account.platform === 'tiktok' && rule.scope === 'ad') {
+        for (const target of unknownStatusTargets) {
+          debugEvals.push({
+            target: target.name, status: null, passed: false, evaluations: [],
+            skipped: 'Không lấy được trạng thái quảng cáo Smart+ từ TikTok; chưa thực hiện hành động',
+            liveMetricsAvailable: Boolean(apiMetricsByRange[uniqueTimeRanges[0]]?.[String(target.external_id)]),
+          });
+        }
+        targets = targets.filter(t => t.status);
+      }
+      const targetsBeforeStatusFilter = targets.length;
       if (rule.target_status_filter && rule.target_status_filter !== 'all') {
         const ACTIVE  = ['ENABLED', 'ACTIVE', 'ENABLE'];
         const PAUSED  = ['PAUSED',  'PAUSE',  'DISABLED', 'DISABLE'];
@@ -680,7 +694,11 @@ const executeRule = async (rule, options = {}) => {
           evaluations: [],
           liveMetricsAvailable: false,
           noTargets: true,
-          noTargetsReason: rule.target_mode === 'specific'
+          noTargetsReason: unknownStatusTargets.length > 0 && targetsBeforeStatusFilter === 0
+            ? 'Đã tìm thấy quảng cáo nhưng TikTok chưa trả trạng thái Smart+; xem lý do bỏ qua ở trên'
+            : targetsBeforeStatusFilter > 0
+            ? 'Có đối tượng nhưng không khớp trạng thái áp dụng đã chọn'
+            : rule.target_mode === 'specific'
             ? 'Không có đối tượng nào thuộc chiến dịch đã chọn trong khoảng thời gian này'
             : 'Không có đối tượng nào trong tài khoản này',
         });

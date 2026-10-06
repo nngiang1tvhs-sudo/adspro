@@ -85,7 +85,8 @@ export const timeAgo = (d) => {
  * Map status sang badge class
  */
 export const getStatusBadge = (status) => {
-  const s = String(status || '').toUpperCase();
+  if (!status) return { class: 'badge-info', label: 'Chưa xác định' };
+  const s = String(status).toUpperCase();
   if (['ENABLED', 'ACTIVE', 'ENABLE'].includes(s)) return { class: 'badge-success', label: 'Đang chạy' };
   if (['PAUSED', 'PAUSE', 'DISABLE'].includes(s)) return { class: 'badge-warning', label: 'Tạm dừng' };
   if (['REMOVED', 'DELETED', 'ARCHIVED'].includes(s)) return { class: 'badge-error', label: 'Đã xóa' };

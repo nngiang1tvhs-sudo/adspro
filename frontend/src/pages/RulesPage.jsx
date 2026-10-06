@@ -367,10 +367,10 @@ export default function RulesPage() {
                     {d.noTargets && <span className="text-xs bg-orange-500 text-white px-2 py-0.5 rounded">⚠ Không tìm thấy đối tượng</span>}
                     {!d.noTargets && d.passed && !d.skipped && <span className="text-xs bg-emerald-600 text-white px-2 py-0.5 rounded">✓ TRIGGER</span>}
                     {!d.noTargets && d.skipped && <span className="text-xs bg-amber-500 text-white px-2 py-0.5 rounded">BỎ QUA: {d.skipped}</span>}
-                    {!d.noTargets && !d.passed && <span className="text-xs bg-slate-400 text-white px-2 py-0.5 rounded">✗ Không thỏa</span>}
+                    {!d.noTargets && !d.passed && !d.skipped && <span className="text-xs bg-slate-400 text-white px-2 py-0.5 rounded">✗ Không thỏa</span>}
                     {!d.noTargets && (
                       <span className={`text-xs ml-auto ${d.liveMetricsAvailable ? 'text-emerald-600' : 'text-red-500'}`}>
-                        API data: {d.liveMetricsAvailable ? '✓ Có dữ liệu' : '✗ Không có dữ liệu hôm nay'}
+                        API data: {d.liveMetricsAvailable ? '✓ Có dữ liệu' : '✗ Không có dữ liệu trong khoảng đã chọn'}
                       </span>
                     )}
                   </div>

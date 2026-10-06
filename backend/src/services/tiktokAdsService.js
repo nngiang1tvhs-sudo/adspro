@@ -52,6 +52,28 @@ const apiCall = async (endpoint, accessToken, params = {}, method = 'GET') => {
   }
 };
 
+// Read every API page. A single account may contain more ads than one page.
+const getAllPages = async (endpoint, accessToken, params = {}) => {
+  const list = [];
+  const pageSize = Math.min(params.page_size || 100, 100);
+  for (let page = 1; ; page++) {
+    const data = await apiCall(endpoint, accessToken, { ...params, page_size: pageSize, page });
+    const rows = data.list || [];
+    list.push(...rows);
+    const totalPages = Number(data.page_info?.total_page);
+    if (Number.isFinite(totalPages) && totalPages > 0) {
+      if (page >= totalPages) break;
+    } else if (rows.length < pageSize) break;
+    if (!rows.length) throw new Error(`TikTok API: trang ${page} trống trước khi lấy đủ dữ liệu ${endpoint}`);
+  }
+  return { list };
+};
+
+// Never substitute creative status for a Smart+ ad's operation status.
+const getAdStatus = (ad, smartStatusMap) => ad.smart_plus_ad_id
+  ? (smartStatusMap[String(ad.smart_plus_ad_id)]?.operation_status || null)
+  : (ad.operation_status || ad.primary_status || null);
+
 /**
  * Refresh access token
  */
@@ -190,7 +212,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
     // Wrap insights trong try-catch — nếu lỗi, campaigns vẫn hiển thị (metrics = 0)
     const insightsMap = {};
     try {
-      const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, reportParams);
+      const insightsData = await getAllPages('/report/integrated/get/', decrypted.access_token, reportParams);
       (insightsData.list || []).forEach(item => {
         insightsMap[item.dimensions.campaign_id] = item.metrics;
       });
@@ -214,7 +236,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
             end_date: fallbackEnd,
           };
           delete fallbackParams.lifetime;
-          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          const fallbackData = await getAllPages('/report/integrated/get/', decrypted.access_token, fallbackParams);
           (fallbackData.list || []).forEach(item => {
             insightsMap[item.dimensions.campaign_id] = item.metrics;
           });
@@ -314,7 +336,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    const data = await apiCall('/adgroup/get/', decrypted.access_token, {
+    const data = await getAllPages('/adgroup/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       filtering: JSON.stringify({ campaign_ids: [campaignExternalId] }),
       page_size: 200,
@@ -359,7 +381,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
         adgroupReportParams.end_date = endDate;
       }
       try {
-        const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
+        const insightsData = await getAllPages('/report/integrated/get/', decrypted.access_token, adgroupReportParams);
         (insightsData.list || []).forEach(item => {
           insightsMap[item.dimensions.adgroup_id] = item.metrics;
         });
@@ -370,7 +392,7 @@ const getAdGroups = async (credentials, campaignExternalId, dateRange = {}) => {
           const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           const fallbackParams = { ...adgroupReportParams, start_date: fallbackStart, end_date: fallbackEnd };
           delete fallbackParams.lifetime;
-          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          const fallbackData = await getAllPages('/report/integrated/get/', decrypted.access_token, fallbackParams);
           (fallbackData.list || []).forEach(item => {
             insightsMap[item.dimensions.adgroup_id] = item.metrics;
           });
@@ -437,7 +459,7 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
 
-    const data = await apiCall('/ad/get/', decrypted.access_token, {
+    const data = await getAllPages('/ad/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       filtering: JSON.stringify({ adgroup_ids: [adGroupExternalId] }),
       page_size: 200,
@@ -482,7 +504,7 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
         adReportParams.end_date = endDate;
       }
       try {
-        const insightsData = await apiCall('/report/integrated/get/', decrypted.access_token, adReportParams);
+        const insightsData = await getAllPages('/report/integrated/get/', decrypted.access_token, adReportParams);
         (insightsData.list || []).forEach(item => {
           insightsMap[item.dimensions.ad_id] = item.metrics;
         });
@@ -493,7 +515,7 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
           const fallbackStart = new Date(today.getTime() - 179 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
           const fallbackParams = { ...adReportParams, start_date: fallbackStart, end_date: fallbackEnd };
           delete fallbackParams.lifetime;
-          const fallbackData = await apiCall('/report/integrated/get/', decrypted.access_token, fallbackParams);
+          const fallbackData = await getAllPages('/report/integrated/get/', decrypted.access_token, fallbackParams);
           (fallbackData.list || []).forEach(item => {
             insightsMap[item.dimensions.ad_id] = item.metrics;
           });
@@ -515,7 +537,7 @@ const getAds = async (credentials, adGroupExternalId, dateRange = {}) => {
       return {
         external_id: ad.ad_id,
         name: ad.ad_name,
-        status: smartStatusMap[ad.smart_plus_ad_id] || ad.operation_status,
+        status: getAdStatus(ad, smartStatusMap),
         ad_type: ad.ad_format,
         video_url: ad.video_id ? `https://www.tiktok.com/video/${ad.video_id}` : null,
         image_url: ad.image_ids?.[0] || null,
@@ -604,7 +626,7 @@ const resolveSmartPlusAdId = async (accessToken, advertiserId, adExternalId) => 
 
 /**
  * Với danh sách ad (raw item từ /ad/get/), trả về map
- * { smart_plus_ad_id -> operation_status thật } cho các ad thuộc Smart+ Campaign
+ * { smart_plus_ad_id -> thông tin Smart+ Ad } cho các ad thuộc Smart+ Campaign
  * (dùng để hiển thị/đánh giá đúng trạng thái, vì operation_status trên chính
  * entity ad_id không phản ánh trạng thái bật/tắt thật của Smart+ Ad).
  */
@@ -613,23 +635,25 @@ const fetchSmartPlusAdStatusMap = async (accessToken, advertiserId, rawAds) => {
   if (smartPlusAdIds.length === 0) return {};
 
   const statusMap = {};
-  // Thử tối đa 2 lần — lỗi mạng/API thoáng qua không nên khiến rules engine
-  // âm thầm rơi về operation_status (không đáng tin cho ad Smart+, xem
-  // updateOperationStatus) và đánh giá sai trạng thái đã tắt/bật.
-  for (let attempt = 1; attempt <= 2; attempt++) {
-    try {
-      const smartData = await apiCall('/smart_plus/ad/get/', accessToken, {
-        advertiser_id: advertiserId,
-        filtering: JSON.stringify({ smart_plus_ad_ids: smartPlusAdIds }),
-        page_size: smartPlusAdIds.length,
-      });
-      (smartData.list || []).forEach(sa => {
-        statusMap[sa.smart_plus_ad_id] = sa.operation_status;
-      });
-      return statusMap;
-    } catch (err) {
-      logger.warn(`TikTok: không lấy được trạng thái Smart+ Ad (lần ${attempt}):`, err.message);
+  // Bound both the ID filter and page size; never use the account's ad count as page_size.
+  for (let offset = 0; offset < smartPlusAdIds.length; offset += 100) {
+    const ids = smartPlusAdIds.slice(offset, offset + 100).map(String);
+    let pendingIds = ids;
+    for (let attempt = 1; attempt <= 2 && pendingIds.length; attempt++) {
+      try {
+        const smartData = await getAllPages('/smart_plus/ad/get/', accessToken, {
+          advertiser_id: advertiserId,
+          filtering: JSON.stringify({ smart_plus_ad_ids: pendingIds }),
+        });
+        (smartData.list || []).forEach(sa => {
+          if (sa.operation_status) statusMap[String(sa.smart_plus_ad_id)] = sa;
+        });
+        pendingIds = pendingIds.filter(id => !statusMap[id]);
+      } catch (err) {
+        logger.warn(`TikTok: không lấy được trạng thái Smart+ Ad (lần ${attempt}):`, err.message);
+      }
     }
+    if (pendingIds.length) logger.warn(`TikTok: thiếu trạng thái của ${pendingIds.length} quảng cáo Smart+`);
   }
   return statusMap;
 };
@@ -734,7 +758,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     const dataLevel = scope === 'ad_group' ? 'AUCTION_ADGROUP' : 'AUCTION_AD';
     const dimension = scope === 'ad_group' ? 'adgroup_id' : 'ad_id';
 
-    const data = await apiCall('/report/integrated/get/', decrypted.access_token, {
+    const data = await getAllPages('/report/integrated/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       report_type: 'BASIC',
       data_level: dataLevel,
@@ -776,7 +800,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     // Fetch item metadata (name/status/campaign_id) for rulesEngine target building
     try {
       if (scope === 'ad_group') {
-        const listData = await apiCall('/adgroup/get/', decrypted.access_token, {
+        const listData = await getAllPages('/adgroup/get/', decrypted.access_token, {
           advertiser_id: decrypted.advertiser_id,
           page_size: 1000,
         });
@@ -789,7 +813,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
             campaign_external_id: ag.campaign_id ? String(ag.campaign_id) : null,
           }));
       } else if (scope === 'ad') {
-        const listData = await apiCall('/ad/get/', decrypted.access_token, {
+        const listData = await getAllPages('/ad/get/', decrypted.access_token, {
           advertiser_id: decrypted.advertiser_id,
           page_size: 1000,
         });
@@ -801,29 +825,24 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         map['__items__'] = rawAds
           .filter(ad => map[String(ad.ad_id)] !== undefined)
           .map(ad => {
-            // Ad Smart+ mà không tra được trạng thái thật (API lỗi thoáng qua)
-            // → để status = null (không xác định) thay vì rơi về operation_status
-            // (đã biết là sai với ad Smart+) — rulesEngine sẽ tự fallback về DB
-            // để tránh coi nhầm là "đang chạy" rồi trigger + gửi mail lặp.
-            const status = ad.smart_plus_ad_id
-              ? (smartStatusMap[ad.smart_plus_ad_id] || null)
-              : (ad.operation_status || ad.primary_status);
+            const status = getAdStatus(ad, smartStatusMap);
             return {
               external_id: String(ad.ad_id),
               name: ad.ad_name,
               status,
-              campaign_external_id: ad.campaign_id ? String(ad.campaign_id) : null,
+              campaign_external_id: (ad.campaign_id || smartStatusMap[String(ad.smart_plus_ad_id)]?.campaign_id)
+                ? String(ad.campaign_id || smartStatusMap[String(ad.smart_plus_ad_id)]?.campaign_id) : null,
             };
           });
       }
     } catch (listErr) {
-      logger.warn(`TikTok getAllScopeMetrics: không lấy được metadata items: ${listErr.message}`);
+      throw new Error(`Không lấy được danh sách đối tượng TikTok: ${listErr.message}`);
     }
 
     return map;
   } catch (err) {
     logger.error(`TikTok getAllScopeMetrics (${scope}) error:`, err.message);
-    return {};
+    throw err;
   }
 };
 
@@ -835,7 +854,7 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
     const startDate = dateRange.from || new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     const endDate = dateRange.to || today.toISOString().split('T')[0];
 
-    const data = await apiCall('/report/integrated/get/', decrypted.access_token, {
+    const data = await getAllPages('/report/integrated/get/', decrypted.access_token, {
       advertiser_id: decrypted.advertiser_id,
       report_type: 'BASIC',
       data_level: 'AUCTION_CAMPAIGN',
