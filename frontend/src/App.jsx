@@ -2,7 +2,6 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
-import DashboardPage from './pages/DashboardPage';
 import CampaignsPage from './pages/CampaignsPage';
 import RulesPage from './pages/RulesPage';
 import HistoryPage from './pages/HistoryPage';
@@ -37,8 +36,8 @@ export default function App() {
           </ProtectedRoute>
         }
       >
-        <Route index element={<Navigate to="/dashboard" replace />} />
-        <Route path="dashboard" element={<DashboardPage />} />
+        <Route index element={<Navigate to="/campaigns" replace />} />
+        <Route path="dashboard" element={<Navigate to="/campaigns" replace />} />
         <Route path="campaigns" element={<CampaignsPage />} />
         <Route path="rules" element={<RulesPage />} />
         <Route path="history" element={<HistoryPage />} />
@@ -46,7 +45,7 @@ export default function App() {
         <Route path="settings" element={<SettingsPage />} />
       </Route>
 
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/campaigns" replace />} />
     </Routes>
   );
 }

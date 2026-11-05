@@ -11,7 +11,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
-  if (user) return <Navigate to="/dashboard" replace />;
+  if (user) return <Navigate to="/campaigns" replace />;
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -23,7 +23,7 @@ export default function LoginPage() {
     try {
       await login(username, password);
       toast.success('Đăng nhập thành công');
-      navigate('/dashboard');
+      navigate('/campaigns', { replace: true });
     } catch (err) {
       toast.error(err.message || 'Đăng nhập thất bại');
     } finally {

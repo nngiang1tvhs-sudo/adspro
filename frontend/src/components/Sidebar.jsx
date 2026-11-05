@@ -1,12 +1,11 @@
 import { NavLink, useNavigate } from 'react-router-dom';
-import { LayoutDashboard, Megaphone, Settings2, History, Link2, LogOut, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
+import { Megaphone, Settings2, History, Link2, LogOut, RefreshCw, SlidersHorizontal, X } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import { campaignsApi } from '../services/api';
 import { useState } from 'react';
 
 const NAV_ITEMS = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/campaigns', icon: Megaphone, label: 'Chiến dịch' },
   { to: '/rules', icon: Settings2, label: 'Quản lý Rule' },
   { to: '/history', icon: History, label: 'Lịch sử' },

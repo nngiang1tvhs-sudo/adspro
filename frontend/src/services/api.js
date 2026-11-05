@@ -47,7 +47,6 @@ export const authApi = {
 
 // ==== DASHBOARD ====
 export const dashboardApi = {
-  get: (platform, params) => api.get(`/dashboard/${platform}`, { params }),
   getAccounts: (platform) => api.get(`/dashboard/${platform}/accounts`),
 };
 
