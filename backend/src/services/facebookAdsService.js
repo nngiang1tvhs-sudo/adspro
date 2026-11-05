@@ -97,6 +97,15 @@ const buildInsightsTimeParam = (dateRange) => {
   return `time_range(${JSON.stringify({ since, until })})`;
 };
 
+// The Facebook rule's existing video_views key represents the UI's Views
+// (ad displays/plays), not the video_view action (3-second video views).
+// Keep the key so saved rules use the corrected count without a DB migration.
+const getViewMetrics = (insights, actions) => ({
+  video_views: Number(insights.impressions || 0),
+  video_3s_views: actions.video_view || 0,
+  video_2s_views: Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
+});
+
 const getCampaigns = async (credentials, dateRange = {}) => {
   try {
     const decrypted = decryptCredentials(credentials);
@@ -153,8 +162,7 @@ const getCampaigns = async (credentials, dateRange = {}) => {
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
           engagements: actions.post_engagement || 0,
-          video_2s_views: Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
-          video_views: actions.video_view || 0,
+          ...getViewMetrics(insights, actions),
           purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
           cpp_mess: (() => { const m = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0; return m > 0 ? Number(insights.spend || 0) / m : 0; })(),
@@ -345,8 +353,7 @@ const getAdSets = async (credentials, campaignExternalId, dateRange = {}) => {
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
           engagements: actions.post_engagement || 0,
-          video_2s_views: Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
-          video_views: actions.video_view || 0,
+          ...getViewMetrics(insights, actions),
           purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
           cpp_mess: (() => { const m = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0; return m > 0 ? Number(insights.spend || 0) / m : 0; })(),
@@ -403,8 +410,7 @@ const getAds = async (credentials, adsetExternalId, dateRange = {}) => {
           messages: actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
           page_likes: actions.like || actions.page_engagement || 0,
           post_engagements: actions.post_engagement || 0,
-          video_2s_views: Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
-          video_views: actions.video_view || 0,
+          ...getViewMetrics(insights, actions),
           purchases: actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
           roas: getROAS(insights),
           cpp_mess: (() => { const m = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0; return m > 0 ? Number(insights.spend || 0) / m : 0; })(),
@@ -518,8 +524,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
         engagements:     actions.post_engagement || 0,
         messages:        actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0,
         page_likes:      actions.like || 0,
-        video_2s_views:  Number(insights.video_continuous_2_sec_watched_actions?.[0]?.value || 0),
-        video_views:     actions.video_view || 0,
+        ...getViewMetrics(insights, actions),
         purchases:       actions['offsite_conversion.fb_pixel_purchase'] || actions.purchase || 0,
         cpp_mess:  (() => { const m = actions.onsite_conversion_messaging_first_reply || actions.messaging_conversation_started_7d || 0; return m > 0 ? Number(insights.spend || 0) / m : 0; })(),
         cpp_follow: (() => { const f = actions.like || 0; return f > 0 ? Number(insights.spend || 0) / f : 0; })(),
