@@ -574,7 +574,8 @@ const getDailyMetrics = async (credentials, dateRange = {}) => {
         impressions: Number(row.impressions || 0),
         clicks: Number(row.clicks || 0),
         conversions: Number(row.conversions || 0),
-        messages: actions.onsite_conversion_messaging_first_reply || 0,
+        messages: actions['onsite_conversion.messaging_first_reply'] ?? actions.messaging_conversation_started_7d ?? 0,
+        page_likes: actions.like ?? 0,
         engagements: actions.post_engagement || 0,
       };
     });

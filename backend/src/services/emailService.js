@@ -3,6 +3,9 @@ const { query } = require('../config/database');
 const logger = require('../utils/logger');
 const { logEvent, EVENT_TYPES } = require('../utils/audit');
 const dayjs = require('dayjs');
+dayjs.extend(require('dayjs/plugin/utc'));
+dayjs.extend(require('dayjs/plugin/timezone'));
+const { buildDailyReportData, buildDailyReportHtml } = require('./dailyReport');
 
 const getResendClient = () => {
   const apiKey = process.env.RESEND_API_KEY;
@@ -94,179 +97,6 @@ const sendEmail = async ({ to, subject, html, userId = null }) => {
   return { success: true, sent: successList, failed: failList, id: results.find(r => r.success)?.id };
 };
 
-/**
- * Tạo HTML báo cáo sáng - phân theo platform → nhóm tài khoản → top 5 chiến dịch
- */
-const buildDailyReportHtml = (data) => {
-  const { date, platforms } = data;
-
-  const PLATFORM_CFG = {
-    google: {
-      label: 'Google Ads',
-      iconBg: '#34A853', iconText: '▲',
-      badgeBg: '#EBF4FF', badgeColor: '#3B82F6',
-      columns: [
-        { key: 'spend',       label: 'CHI TIÊU',    fmt: 'currency' },
-        { key: 'impressions', label: 'HIỂN THỊ',    fmt: 'number'   },
-        { key: 'conversions', label: 'KẾT QUẢ',     fmt: 'number'   },
-      ],
-    },
-    tiktok: {
-      label: 'TikTok Ads',
-      iconBg: '#010101', iconText: '♪',
-      badgeBg: '#FFF0F3', badgeColor: '#F43F5E',
-      columns: [
-        { key: 'spend',       label: 'CHI TIÊU',    fmt: 'currency' },
-        { key: 'video_views', label: 'VIEWS',        fmt: 'number'   },
-        { key: 'follows',     label: 'FOLLOWS',      fmt: 'number'   },
-        { key: 'conversions', label: 'KẾT QUẢ',     fmt: 'number'   },
-      ],
-    },
-    facebook: {
-      label: 'Facebook Ads',
-      iconBg: '#1877F2', iconText: 'f',
-      badgeBg: '#EBF4FF', badgeColor: '#3B82F6',
-      columns: [
-        { key: 'spend',       label: 'CHI TIÊU',    fmt: 'currency' },
-        { key: 'conversions', label: 'KẾT QUẢ',     fmt: 'number'   },
-        { key: 'engagements', label: 'TƯƠNG TÁC',    fmt: 'number'   },
-        { key: 'video_views', label: 'VIDEO 2S',     fmt: 'number'   },
-      ],
-    },
-  };
-
-  let totalSpendAll = 0;
-  let totalCampaigns = 0;
-  const platformEntries = Object.entries(platforms);
-  for (const [, info] of platformEntries) {
-    totalSpendAll += info.totalSpend || 0;
-    totalCampaigns += info.activeCampaigns || 0;
-  }
-
-  let platformsHtml = '';
-  for (const [key, info] of platformEntries) {
-    const cfg = PLATFORM_CFG[key];
-    if (!cfg) continue;
-
-    // Render từng nhóm tài khoản
-    let groupsHtml = '';
-    for (const group of (info.groups || [])) {
-      const currency = group.currency || 'VND';
-      const sym = getCurrencySymbol(currency);
-
-      const thCells = cfg.columns.map(c =>
-        `<td style="padding:8px 10px;text-align:right;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.7px;white-space:nowrap;">${c.label}</td>`
-      ).join('');
-
-      const rows = (group.topCampaigns || []).map((camp, i) => {
-        const bg = i % 2 === 0 ? '#FFFFFF' : '#FAFBFC';
-        const tds = cfg.columns.map(c => {
-          const val = camp[c.key] || 0;
-          const txt = c.fmt === 'currency' ? (sym + formatShort(val)) : formatNumber(val);
-          const color = c.fmt === 'currency' ? '#1E293B' : '#374151';
-          const fw   = c.fmt === 'currency' ? '600' : '400';
-          return `<td style="padding:8px 10px;text-align:right;font-size:12px;color:${color};font-weight:${fw};white-space:nowrap;">${txt}</td>`;
-        }).join('');
-        return `<tr style="background:${bg};border-bottom:1px solid #F1F5F9;">
-          <td style="padding:8px 10px;font-size:12px;color:#1E293B;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${camp.name}</td>${tds}
-        </tr>`;
-      }).join('');
-
-      const emptyRow = !group.topCampaigns?.length
-        ? `<tr><td colspan="${cfg.columns.length + 1}" style="padding:14px;text-align:center;color:#94A3B8;font-size:12px;">Không có chi tiêu hôm qua</td></tr>`
-        : '';
-
-      groupsHtml += `
-      <div style="margin-bottom:14px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:#F8FAFC;border-left:3px solid ${cfg.iconBg};border-radius:0 6px 0 0;">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:13px;font-weight:700;color:#1E293B;">${group.groupName}</span>
-            <span style="font-size:10px;color:#94A3B8;background:#EEF2F7;padding:2px 7px;border-radius:10px;">${group.activeCampaigns} đang chạy</span>
-          </div>
-          <span style="font-size:13px;font-weight:700;color:${cfg.iconBg};">${sym}${formatShort(group.totalSpend)}</span>
-        </div>
-        <div style="border:1px solid #E8ECF0;border-top:none;border-radius:0 0 8px 8px;overflow:hidden;">
-          <table style="width:100%;border-collapse:collapse;">
-            <tr style="background:#F8F9FB;border-bottom:1px solid #E8ECF0;">
-              <td style="padding:8px 10px;font-size:10px;font-weight:600;color:#94A3B8;letter-spacing:0.7px;">CHIẾN DỊCH CHI TIÊU NHIỀU NHẤT</td>
-              ${thCells}
-            </tr>
-            ${rows}${emptyRow}
-          </table>
-        </div>
-      </div>`;
-    }
-
-    platformsHtml += `
-    <div style="margin-bottom:28px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #F1F5F9;">
-        <div style="display:flex;align-items:center;gap:10px;">
-          <div style="width:34px;height:34px;border-radius:9px;background:${cfg.iconBg};text-align:center;line-height:34px;color:#FFF;font-weight:700;font-size:15px;flex-shrink:0;">${cfg.iconText}</div>
-          <div>
-            <div style="font-weight:700;color:#1E293B;font-size:15px;">${cfg.label}</div>
-            <div style="color:#94A3B8;font-size:11px;margin-top:1px;">${info.activeCampaigns || 0} chiến dịch · ${(info.groups || []).length} nhóm tài khoản</div>
-          </div>
-        </div>
-        <div style="background:${cfg.badgeBg};color:${cfg.badgeColor};font-size:14px;font-weight:700;padding:5px 13px;border-radius:8px;white-space:nowrap;">${getCurrencySymbol((info.groups?.[0]?.currency) || 'VND')}${formatShort(info.totalSpend || 0)}</div>
-      </div>
-      ${groupsHtml}
-    </div>`;
-  }
-
-  return `<!DOCTYPE html>
-<html>
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Báo cáo Ads hàng ngày</title></head>
-<body style="margin:0;padding:0;background:#F2F4F7;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;">
-<div style="max-width:640px;margin:0 auto;padding:20px 16px;">
-<div style="border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.10);">
-
-  <!-- Dark header -->
-  <div style="background:#1C2537;padding:24px;">
-    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:20px;">
-      <div>
-        <div style="color:#9CA3AF;font-size:10px;font-weight:600;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px;">DAILY REPORT</div>
-        <div style="color:#FFFFFF;font-size:22px;font-weight:700;">Báo cáo Ads hàng ngày</div>
-      </div>
-      <div style="background:#252F45;border-radius:10px;padding:10px 16px;text-align:center;min-width:90px;">
-        <div style="color:#9CA3AF;font-size:10px;margin-bottom:4px;">Ngày</div>
-        <div style="color:#FFFFFF;font-size:15px;font-weight:700;">${dayjs(date).format('DD/MM/YYYY')}</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:10px;">
-      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
-        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">TỔNG CHI TIÊU</div>
-        <div style="color:#4DD9C0;font-size:22px;font-weight:700;">${formatShort(totalSpendAll)}</div>
-      </div>
-      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
-        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">CHIẾN DỊCH</div>
-        <div><span style="color:#FFFFFF;font-size:22px;font-weight:700;">${totalCampaigns}</span><span style="color:#9CA3AF;font-size:12px;margin-left:6px;">đang chạy</span></div>
-      </div>
-      <div style="flex:1;background:#252F45;border-radius:10px;padding:14px 16px;">
-        <div style="color:#9CA3AF;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">NỀN TẢNG</div>
-        <div><span style="color:#FFFFFF;font-size:22px;font-weight:700;">${platformEntries.length}</span><span style="color:#9CA3AF;font-size:12px;margin-left:6px;">kênh</span></div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Content -->
-  <div style="background:#FFFFFF;padding:24px;">
-    ${platformsHtml}
-  </div>
-
-  <!-- Footer -->
-  <div style="background:#F8FAFC;padding:16px;text-align:center;border-top:1px solid #E8ECF0;">
-    <div style="color:#94A3B8;font-size:12px;">Báo cáo tự động · Dữ liệu cập nhật lúc 07:00 AM</div>
-    <div style="color:#94A3B8;font-size:12px;margin-top:4px;">— AdsPro —</div>
-  </div>
-
-</div>
-</div>
-</body>
-</html>`;
-};
-
-const formatShort    = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
-const formatCurrency = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 const formatNumber   = (n) => new Intl.NumberFormat('vi-VN').format(Math.round(n));
 
 const CURRENCY_SYMBOLS = {
@@ -278,7 +108,7 @@ const getCurrencySymbol = (currency) => CURRENCY_SYMBOLS[currency?.toUpperCase()
 
 /**
  * Gửi báo cáo sáng cho 1 user
- * Phân cấp: platform → nhóm tài khoản (group_name) → top 5 chiến dịch
+ * Phân cấp: platform → nhóm tài khoản/tiền tệ → mục tiêu → mã dự án
  */
 const sendDailyReport = async (userId) => {
   try {
@@ -288,90 +118,30 @@ const sendDailyReport = async (userId) => {
       return { success: false, message: 'Chưa cài đặt email' };
     }
 
-    const yesterday = dayjs().subtract(1, 'day').format('YYYY-MM-DD');
-    const platforms = {};
-
-    for (const platform of ['google', 'tiktok', 'facebook']) {
-      const accountsResult = await query(
-        `SELECT id, group_name, currency FROM ad_accounts WHERE user_id = $1 AND platform = $2`,
-        [userId, platform]
-      );
-      if (accountsResult.rowCount === 0) continue;
-
-      // Group accounts by group_name
-      const groupMap = {};
-      for (const acct of accountsResult.rows) {
-        const gName = acct.group_name || 'Chưa phân nhóm';
-        if (!groupMap[gName]) groupMap[gName] = { accountIds: [], currency: acct.currency || 'VND' };
-        groupMap[gName].accountIds.push(acct.id);
-        if (acct.currency && acct.currency !== 'VND') groupMap[gName].currency = acct.currency;
-      }
-
-      const groups = [];
-      for (const [groupName, groupInfo] of Object.entries(groupMap)) {
-        const { accountIds, currency } = groupInfo;
-
-        const totalsResult = await query(
-          `SELECT COALESCE(SUM(spend), 0) as total_spend
-           FROM daily_metrics
-           WHERE account_id = ANY($1) AND date = $2`,
-          [accountIds, yesterday]
-        );
-
-        const activeResult = await query(
-          `SELECT COUNT(*) as count FROM campaigns
-           WHERE account_id = ANY($1) AND status IN ('ENABLED', 'ACTIVE', 'ENABLE')`,
-          [accountIds]
-        );
-
-        const campaignsResult = await query(
-          `SELECT c.name,
-                  COALESCE(dm.spend, 0)         AS spend,
-                  COALESCE(dm.impressions, 0)   AS impressions,
-                  COALESCE(dm.video_views, 0)   AS video_views,
-                  COALESCE(dm.follows, 0)       AS follows,
-                  COALESCE(dm.engagements, 0)   AS engagements,
-                  COALESCE(dm.conversions, 0)   AS conversions
-           FROM campaigns c
-           INNER JOIN daily_metrics dm ON dm.campaign_id = c.id AND dm.date = $2
-           WHERE c.account_id = ANY($1) AND dm.spend > 0
-           ORDER BY dm.spend DESC
-           LIMIT 5`,
-          [accountIds, yesterday]
-        );
-
-        groups.push({
-          groupName,
-          currency,
-          totalSpend:      Number(totalsResult.rows[0].total_spend),
-          activeCampaigns: Number(activeResult.rows[0].count),
-          topCampaigns:    campaignsResult.rows.map(r => ({
-            name:        r.name,
-            spend:       Number(r.spend),
-            impressions: Number(r.impressions),
-            video_views: Number(r.video_views),
-            follows:     Number(r.follows),
-            engagements: Number(r.engagements),
-            conversions: Number(r.conversions),
-          })),
-        });
-      }
-
-      // Sort groups by spend descending
-      groups.sort((a, b) => b.totalSpend - a.totalSpend);
-
-      const totalSpend = groups.reduce((s, g) => s + g.totalSpend, 0);
-      const activeCampaigns = groups.reduce((s, g) => s + g.activeCampaigns, 0);
-
-      platforms[platform] = { totalSpend, activeCampaigns, groups };
-    }
-
-    if (Object.keys(platforms).length === 0) {
-      logger.info(`User ${userId} chưa kết nối tài khoản nào`);
+    const yesterday = dayjs().tz(process.env.TIMEZONE || 'Asia/Ho_Chi_Minh').subtract(1, 'day').format('YYYY-MM-DD');
+    const accountsResult = await query(
+      'SELECT id, platform, group_name, currency FROM ad_accounts WHERE user_id = $1 ORDER BY id',
+      [userId]
+    );
+    if (!accountsResult.rowCount) {
       return { success: false, message: 'Chưa có tài khoản nào' };
     }
-
-    const html = buildDailyReportHtml({ date: yesterday, platforms });
+    // All campaigns must reach aggregation before any ranking or grouping.
+    // Keep missing historical page likes in raw_metrics distinct from a real zero.
+    const campaignsResult = await query(
+      `SELECT c.id, c.account_id, c.name, c.status, c.objective,
+              dm.spend, dm.impressions, dm.clicks, dm.video_views,
+              dm.follows, dm.engagements, dm.conversions,
+              dm.raw_metrics AS daily_raw_metrics
+       FROM campaigns c
+       LEFT JOIN daily_metrics dm ON dm.campaign_id = c.id
+         AND dm.account_id = c.account_id AND dm.date = $2
+       WHERE c.account_id = ANY($1)
+       ORDER BY c.id`,
+      [accountsResult.rows.map(account => account.id), yesterday]
+    );
+    const data = buildDailyReportData({ date: yesterday, accounts: accountsResult.rows, campaigns: campaignsResult.rows });
+    const html = buildDailyReportHtml(data);
 
     return await sendEmail({
       to: emails,
