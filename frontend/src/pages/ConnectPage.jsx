@@ -5,7 +5,9 @@ import toast from 'react-hot-toast';
 import { Plus, Edit, Trash2, RefreshCw, Mail, X, CheckCircle, AlertCircle, Send } from 'lucide-react';
 
 const TABS = [
-  { key: 'accounts', label: 'Tài khoản' },
+  { key: 'google', label: 'Google Ads' },
+  { key: 'tiktok', label: 'TikTok' },
+  { key: 'facebook', label: 'Meta' },
   { key: 'email', label: 'Cài đặt email' },
 ];
 
@@ -34,7 +36,7 @@ const PLATFORM_FIELDS = {
 };
 
 export default function ConnectPage() {
-  const [tab, setTab] = useState('accounts');
+  const [tab, setTab] = useState('google');
 
   return (
     <div className="space-y-4">
@@ -43,10 +45,23 @@ export default function ConnectPage() {
         <p className="text-sm text-slate-500 mt-0.5">Quản lý kết nối các nền tảng quảng cáo và email</p>
       </div>
 
-      <div className="inline-flex bg-white border border-slate-200 rounded-lg p-1 shadow-sm">
+      <div role="tablist" aria-label="Nền tảng kết nối" className="flex flex-wrap gap-1 bg-white border border-slate-200 rounded-lg p-1 w-fit">
         {TABS.map(t => (
           <button
             key={t.key}
+            id={`connect-tab-${t.key}`}
+            role="tab"
+            aria-selected={tab === t.key}
+            aria-controls="connect-panel"
+            tabIndex={tab === t.key ? 0 : -1}
+            onKeyDown={e => {
+              if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+              e.preventDefault();
+              const index = TABS.findIndex(item => item.key === tab);
+              const next = e.key === 'Home' ? 0 : e.key === 'End' ? TABS.length - 1 : (index + (e.key === 'ArrowRight' ? 1 : -1) + TABS.length) % TABS.length;
+              setTab(TABS[next].key);
+              document.getElementById(`connect-tab-${TABS[next].key}`)?.focus();
+            }}
             onClick={() => setTab(t.key)}
             className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${
               tab === t.key ? 'bg-brand-500 text-white' : 'text-slate-600 hover:bg-slate-50'
@@ -57,12 +72,14 @@ export default function ConnectPage() {
         ))}
       </div>
 
-      {tab === 'accounts' ? <AccountsTab /> : <EmailTab />}
+      <div id="connect-panel" role="tabpanel" aria-labelledby={`connect-tab-${tab}`}>
+        {tab === 'email' ? <EmailTab /> : <AccountsTab platform={tab} />}
+      </div>
     </div>
   );
 }
 
-function AccountsTab() {
+function AccountsTab({ platform }) {
   const [accounts, setAccounts] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showForm, setShowForm] = useState(false);
@@ -124,7 +141,7 @@ function AccountsTab() {
     <div className="space-y-4">
       <div className="flex justify-end">
         <button onClick={() => { setEditing(null); setShowForm(true); }} className="btn btn-primary">
-          <Plus size={16} /> Thêm tài khoản
+          <Plus size={16} /> Thêm tài khoản {platform === 'facebook' ? 'Meta' : PLATFORM_LABELS[platform]}
         </button>
       </div>
 
@@ -132,11 +149,10 @@ function AccountsTab() {
         <div className="text-center py-12 text-slate-400">Đang tải...</div>
       ) : (
         <div className="space-y-5">
-          {PLATFORMS.map(platform => (
-            <div key={platform}>
+            <div>
               <div className="flex items-center gap-2 mb-2">
                 <span className="w-2.5 h-2.5 rounded-full" style={{ background: PLATFORM_COLORS[platform] }} />
-                <h3 className="font-semibold text-slate-700">{PLATFORM_LABELS[platform]}</h3>
+                <h3 className="font-semibold text-slate-700">{platform === 'facebook' ? 'Meta' : PLATFORM_LABELS[platform]}</h3>
                 <span className="text-xs text-slate-400">({groupedByPlatform[platform].total})</span>
               </div>
               {groupedByPlatform[platform].total === 0 ? (
@@ -169,13 +185,13 @@ function AccountsTab() {
                 </div>
               )}
             </div>
-          ))}
         </div>
       )}
 
       {showForm && (
         <AccountFormModal
           account={editing}
+          initialPlatform={platform}
           onClose={() => { setShowForm(false); setEditing(null); }}
           onSaved={() => { setShowForm(false); setEditing(null); loadAccounts(); }}
         />
@@ -238,8 +254,8 @@ function AccountCard({ account, onTest, onEdit, onDelete }) {
   );
 }
 
-function AccountFormModal({ account, onClose, onSaved }) {
-  const [platform, setPlatform] = useState(account?.platform || 'google');
+function AccountFormModal({ account, initialPlatform, onClose, onSaved }) {
+  const platform = account?.platform || initialPlatform;
   const [accountName, setAccountName] = useState(account?.account_name || '');
   const [groupName, setGroupName] = useState(account?.group_name || '');
   const [credentials, setCredentials] = useState({});
@@ -303,24 +319,7 @@ function AccountFormModal({ account, onClose, onSaved }) {
         </div>
 
         <div className="p-5 space-y-4 max-h-[70vh] overflow-y-auto">
-          {!account && (
-            <div>
-              <label className="label">Nền tảng</label>
-              <div className="grid grid-cols-3 gap-2">
-                {PLATFORMS.map(p => (
-                  <button
-                    key={p}
-                    onClick={() => { setPlatform(p); setCredentials({}); setTestResult(null); }}
-                    className={`p-3 rounded-lg border-2 text-sm font-medium transition-colors ${
-                      platform === p ? 'border-brand-500 bg-brand-50 text-brand-600' : 'border-slate-200 bg-white'
-                    }`}
-                  >
-                    {PLATFORM_LABELS[p]}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          <div className="text-sm text-slate-600">Nền tảng: <strong>{platform === 'facebook' ? 'Meta' : PLATFORM_LABELS[platform]}</strong></div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
