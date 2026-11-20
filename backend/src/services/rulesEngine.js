@@ -513,7 +513,7 @@ const executeRule = async (rule, options = {}) => {
           }
         } catch (err) {
           logger.warn(`Rule ${rule.id}: Lỗi lấy dữ liệu API ${tr}: ${err.message}`);
-          if (account.platform === 'tiktok') throw err;
+          if (['tiktok', 'google'].includes(account.platform)) throw err;
         }
       }
 
