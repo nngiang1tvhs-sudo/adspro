@@ -500,7 +500,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     const map = {};
     if (scope === 'ad_group') {
       const results = await customer.query(
-        `SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id AS campaign_id,
+        `SELECT ad_group.id, ad_group.name, ad_group.status, campaign.id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_trueview_views, metrics.trueview_average_cpv, metrics.conversions,
                 metrics.cost_per_conversion, metrics.engagements, metrics.search_impression_share
@@ -520,7 +520,7 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
       map['__items__'] = items;
     } else if (scope === 'ad') {
       const results = await customer.query(
-        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, campaign.id AS campaign_id,
+        `SELECT ad_group_ad.ad.id, ad_group_ad.ad.name, ad_group_ad.status, campaign.id,
                 metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc,
                 metrics.cost_micros, metrics.video_trueview_views, metrics.trueview_average_cpv, metrics.conversions,
                 metrics.cost_per_conversion, metrics.engagements
@@ -541,8 +541,9 @@ const getAllScopeMetrics = async (credentials, dateRange, scope) => {
     }
     return map;
   } catch (err) {
-    logger.error(`Google getAllScopeMetrics (${scope}) error:`, extractGoogleAdsError(err));
-    return {};
+    const message = extractGoogleAdsError(err);
+    logger.error(`Google getAllScopeMetrics (${scope}) error:`, message);
+    throw new Error(`Lỗi lấy dữ liệu rule Google Ads (${scope}): ${message}`);
   }
 };
 
